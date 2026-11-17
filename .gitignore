@@ -19,6 +19,7 @@
 *.csproj
 *.unityproj
 *.sln
+*.slnx
 *.suo
 *.tmp
 *.user
@@ -30,6 +31,9 @@
 *.mdb
 *.opendb
 *.VC.db
+
+# Logs
+*.log
 
 # OS generated
 .DS_Store

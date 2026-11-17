@@ -673,7 +673,11 @@ namespace AIUnityTools
         static object UIAction(Dictionary<string, object> p)
         {
             string kind = Str(p, "kind", Str(p, "type", "panel")).ToLowerInvariant();
+#if UNITY_2023_1_OR_NEWER
+            Canvas canvas = Object.FindAnyObjectByType<Canvas>();
+#else
             Canvas canvas = Object.FindObjectOfType<Canvas>();
+#endif
             if (kind == "canvas")
             {
                 if (canvas != null && GetBool(p, "reuse", true)) return Info(canvas.gameObject);
@@ -914,7 +918,11 @@ namespace AIUnityTools
                 }
             }
             if (Camera.main != null) return Camera.main;
+#if UNITY_2023_1_OR_NEWER
+            var cams = Object.FindObjectsByType<Camera>();
+#else
             var cams = Object.FindObjectsOfType<Camera>();
+#endif
             return cams.FirstOrDefault(c => c.isActiveAndEnabled) ?? cams.FirstOrDefault();
         }
 
@@ -1149,7 +1157,11 @@ namespace AIUnityTools
             var info = D(
                 "name", go.name,
                 "path", PathOf(go),
+#if UNITY_6000_0_OR_NEWER
+                "instanceId", go.GetEntityId().ToString(),
+#else
                 "instanceId", go.GetInstanceID(),
+#endif
                 "active", go.activeSelf,
                 "activeInHierarchy", go.activeInHierarchy,
                 "tag", go.tag,
@@ -1201,12 +1213,14 @@ namespace AIUnityTools
         static GameObject ResolveObject(string target)
         {
             if (string.IsNullOrEmpty(target)) return null;
+#if !UNITY_6000_0_OR_NEWER
             int id;
             if (int.TryParse(target, out id))
             {
                 var byId = EditorUtility.InstanceIDToObject(id) as GameObject;
                 if (byId != null) return byId;
             }
+#endif
             var direct = GameObject.Find(target);
             if (direct != null) return direct;
             foreach (var root in AllRoots())

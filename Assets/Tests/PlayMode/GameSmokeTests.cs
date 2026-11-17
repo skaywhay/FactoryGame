@@ -33,7 +33,11 @@ namespace Game.Tests
                 yield return SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
                 for (int i = 0; i < 30; i++) yield return null;
 
+#if UNITY_2023_1_OR_NEWER
+                var game = Object.FindAnyObjectByType<FactoryGame>();
+#else
                 var game = Object.FindObjectOfType<FactoryGame>();
+#endif
                 Assert.IsNotNull(game, "FactoryGame bootstrap is missing in " + sceneName);
                 Assert.IsNotNull(game.Sim, "FactorySim was not created");
                 Assert.AreEqual(ProductInfo.Count, game.Sim.Lines.Count, "Expected one line per product");
@@ -41,10 +45,18 @@ namespace Game.Tests
                 Assert.AreEqual(2, game.Sim.Generators.Count, "Expected 2 generators");
                 Assert.IsTrue(game.Sim.EnergyOk, "Machines draw more energy than generators provide");
 
+#if UNITY_2023_1_OR_NEWER
+                var canvas = Object.FindAnyObjectByType<Canvas>();
+#else
                 var canvas = Object.FindObjectOfType<Canvas>();
+#endif
                 Assert.IsNotNull(canvas, "Runtime HUD canvas was not created");
 
+#if UNITY_2023_1_OR_NEWER
+                var camera = Camera.main != null ? Camera.main : Object.FindAnyObjectByType<Camera>();
+#else
                 var camera = Camera.main != null ? Camera.main : Object.FindObjectOfType<Camera>();
+#endif
                 Assert.IsNotNull(camera, "The scene has no camera.");
 
                 yield return new WaitForSeconds(2f);
@@ -59,6 +71,25 @@ namespace Game.Tests
                 ScreenCapture.CaptureScreenshot(file);
                 float deadline = Time.realtimeSinceStartup + 10f;
                 while (!File.Exists(file) && Time.realtimeSinceStartup < deadline) yield return null;
+
+                if (!File.Exists(file))
+                {
+                    var rt = new RenderTexture(1280, 720, 24);
+                    var prev = camera.targetTexture;
+                    var prevActive = RenderTexture.active;
+                    camera.targetTexture = rt;
+                    camera.Render();
+                    RenderTexture.active = rt;
+                    var shot = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
+                    shot.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+                    shot.Apply();
+                    camera.targetTexture = prev;
+                    RenderTexture.active = prevActive;
+                    File.WriteAllBytes(file, shot.EncodeToPNG());
+                    Object.DestroyImmediate(shot);
+                    Object.DestroyImmediate(rt);
+                }
+
                 Assert.IsTrue(File.Exists(file), "ScreenCapture did not produce a screenshot (run with graphics enabled).");
                 Assert.Greater(new FileInfo(file).Length, 1000, "Screenshot is suspiciously small.");
 
