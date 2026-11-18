@@ -1,22 +1,29 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Game.Factory
 {
-    // Весь HUD рисуется кодом, без префабов: так проще править, но файл большой.
-    // Ориентир по координатам — левый верхний угол панели (anchor 0,1).
+    /// <summary>
+    /// Главный HUD производственного цеха и управления линиями завода.
+    /// Построен по модульному принципу с разделением на под-канвасы (Sub-Canvases),
+    /// использованием 9-slice спрайтов, аппаратным адаптивным лейаутом и плавной анимацией сайдбара.
+    /// </summary>
     public class Hud
     {
         class Card
         {
             public RectTransform Root;
+            public Image Background;
+            public Image Stripe;
             public Text Title;
             public Text Level;
             public Text Stats;
             public Text Power;
             public Text ButtonLabel;
             public Button Button;
+            public Image ButtonImage;
             public Color Accent;
         }
 
@@ -30,38 +37,40 @@ namespace Game.Factory
             public Text Status;
         }
 
-        // Поля HUD. Тут просто ссылки на тексты, чтобы не искать их каждый кадр.
+        // ------------------------------------------------------------- Fields
         readonly FactoryGame _game;
 
+        // TopBar Elements
         Text _money;
         Text _day;
         Text _plan;
+        RectTransform _planProgressBar;
         Text _phase;
+        Image _energyDot;
         Text _energy;
         Text _materials;
         Text _upkeep;
-        Text _banner;
         Text _planDetail;
+
+        // Sidebar & Dynamic Navigation
+        RectTransform _sidebarPanel;
+        RectTransform _sidebarToggleArrow;
+        bool _sidebarCollapsed;
+        float _sidebarCurrentX;
+        float _sidebarTargetX;
+        const float SidebarWidth = 340f;
+
+        // Modals & Overlays
         Text _tableTotals;
         Text _journal;
         Text _gameOverText;
         GameObject _gameOver;
-
-        // 3 карточки станков + 2 генератора + 3 сборки + карточка постройки линии.
-        // Карточки станков и сборок делят одни и те же места на панели.
-        readonly Card[] _cards = new Card[3];
-        readonly Card[] _generators = new Card[2];
-        readonly Card[] _assemblyCards = new Card[3];
-
-        Card _build;
-        Button[] _tabs;
-        Row[] _rows; // 3 линии + 3 сборки
-
         GameObject _table;
         Text _tableButtonLabel;
-
         GameObject _tutorial;
         Text _tutorialButtonLabel;
+
+        // Tutorial Steps
         int _tutorialStep;
         Text _tutorialStepBadge;
         Text _tutorialStepTitle;
@@ -78,52 +87,144 @@ namespace Game.Factory
         Text _tutorialNextLabel;
         Button[] _tutorialStepTabs;
 
+        // Advice Banner
         GameObject _hintCard;
+        Text _hintTitle;
         Text _hintText;
+        Button _hintMinimizedBtn;
+        bool _adviceVisible = true;
+
+        // Cards & Tabs
+        readonly Card[] _cards = new Card[3];
+        readonly Card[] _generators = new Card[2];
+        readonly Card[] _assemblyCards = new Card[3];
+        Card _build;
+        Button[] _tabs;
+        Row[] _rows;
 
         int _selected;
         int _buildTarget = -1;
 
+        // Fonts & Typography
         static Font _font;
-        static readonly Color Panel = new Color(0.075f, 0.085f, 0.11f, 0.94f);
-        static readonly Color CardColor = new Color(0.12f, 0.135f, 0.17f, 0.97f);
-        static readonly Color TextColor = new Color(0.88f, 0.91f, 0.95f);
-        static readonly Color Muted = new Color(0.60f, 0.65f, 0.73f);
-        static readonly Color Dim = new Color(0.20f, 0.22f, 0.27f);
 
-        static readonly Color[] LineColors =
-        {
-            new Color(0.98f, 0.74f, 0.28f),
-            new Color(0.30f, 0.82f, 0.86f),
-            new Color(0.72f, 0.56f, 0.98f)
-        };
+        // Design System Palette (Figma Design Tokens)
+        static readonly Color ColorSurface0 = new Color(0.070f, 0.086f, 0.102f, 1f);     // #12161A
+        static readonly Color ColorSurface1 = new Color(0.094f, 0.125f, 0.145f, 0.98f);   // #182025
+        static readonly Color ColorSurface2 = new Color(0.133f, 0.169f, 0.192f, 1f);     // #222B31
+        static readonly Color ColorAssemblyBase = new Color(0.133f, 0.157f, 0.180f, 1f); // #22282E
+        static readonly Color ColorBorder = new Color(0.169f, 0.220f, 0.251f, 1f);       // #2B3840
+        static readonly Color TextWhite = new Color(0.96f, 0.97f, 0.99f, 1f);
+        static readonly Color TextMuted = new Color(0.56f, 0.61f, 0.65f, 1f);             // #8F9CA7
 
-        static readonly Color BuyerColor = new Color(0.98f, 0.62f, 0.22f);
-        static readonly Color ProducerColor = new Color(0.35f, 0.78f, 0.98f);
-        static readonly Color SellerColor = new Color(0.55f, 0.90f, 0.45f);
-        static readonly Color GeneratorColor = new Color(0.99f, 0.85f, 0.30f);
+        // Accent Colors
+        static readonly Color AccentAmber = new Color(1.00f, 0.702f, 0.00f, 1f);          // #FFB300
+        static readonly Color AccentCyan = new Color(0.00f, 0.824f, 1.00f, 1f);           // #00D2FF
+        static readonly Color AccentGreen = new Color(0.180f, 0.835f, 0.451f, 1f);        // #2ED573
+        static readonly Color AccentPink = new Color(0.949f, 0.580f, 0.722f, 1f);         // #F294B8
+        static readonly Color AccentPurple = new Color(0.647f, 0.369f, 0.918f, 1f);       // #A55EEA
+        static readonly Color AccentRed = new Color(0.839f, 0.188f, 0.192f, 1f);          // #D63031
 
+        static readonly Color[] LineColors = { AccentAmber, AccentCyan, AccentPurple };
+
+        // 9-Slice UI Sprites
+        static Sprite _sprTopBarBg;
+        static Sprite _sprBannerPlanBg;
+        static Sprite _sprBannerAdviceBg;
+        static Sprite _sprSidebarBg;
+        static Sprite _sprCardMachineBase;
+        static Sprite _sprCardAssemblyBase;
+        static Sprite _sprTabContainerBg;
+        static Sprite _sprTabActive;
+        static Sprite _sprBtnAmber;
+        static Sprite _sprBtnPink;
+        static Sprite _sprBtnNeutral;
+        static Sprite _sprBtnDisabled;
+        static Sprite _sprBtnRed;
+        static Sprite _sprSidebarToggle;
+        static Sprite _sprProgressTrack;
+        static Sprite _sprProgressFill;
+        static Sprite _sprAccentBar;
+        static Sprite _sprDivider;
+        static Sprite _sprStatusDot;
+        static Sprite _sprArrowCollapse;
+
+        // ------------------------------------------------------------- Constructor
         public Hud(FactoryGame game)
         {
             _game = game;
+            InitSprites();
             _font = LoadFont();
             Build();
         }
 
+        static void InitSprites()
+        {
+            _sprTopBarBg = LoadSprite("panel_topbar_bg", 14, 14, 14, 14, ColorSurface1, ColorBorder, 12);
+            _sprBannerPlanBg = LoadSprite("banner_daily_plan_bg", 10, 10, 10, 10, new Color(0.086f, 0.122f, 0.141f), ColorBorder, 8);
+            _sprBannerAdviceBg = LoadSprite("banner_advice_bg", 14, 14, 14, 14, ColorSurface1, ColorBorder, 12);
+            _sprSidebarBg = LoadSprite("frame_sidebar_bg", 18, 18, 18, 18, ColorSurface1, new Color(0.16f, 0.21f, 0.24f), 16);
+            _sprCardMachineBase = LoadSprite("card_machine_base", 14, 14, 14, 14, ColorSurface2, new Color(0.18f, 0.23f, 0.27f), 12);
+            _sprCardAssemblyBase = LoadSprite("card_assembly_base", 14, 14, 14, 14, ColorAssemblyBase, new Color(0.24f, 0.16f, 0.22f), 12);
+            _sprTabContainerBg = LoadSprite("tab_container_bg", 12, 12, 12, 12, new Color(0.078f, 0.102f, 0.122f), Color.clear, 10);
+            _sprTabActive = LoadSprite("tab_item_active", 10, 10, 10, 10, ColorSurface2, Color.clear, 8);
+            _sprBtnAmber = LoadSprite("btn_cta_amber", 10, 10, 10, 10, AccentAmber, Color.clear, 8);
+            _sprBtnPink = LoadSprite("btn_cta_pink", 10, 10, 10, 10, AccentPink, Color.clear, 8);
+            _sprBtnNeutral = LoadSprite("btn_secondary_neutral", 10, 10, 10, 10, ColorSurface1, new Color(0.17f, 0.22f, 0.25f), 8);
+            _sprBtnDisabled = LoadSprite("btn_disabled", 10, 10, 10, 10, new Color(0.118f, 0.149f, 0.173f), Color.clear, 8);
+            _sprBtnRed = LoadSprite("btn_destructive_red", 10, 10, 10, 10, AccentRed, Color.clear, 8);
+            _sprSidebarToggle = LoadSprite("sidebar_toggle_bg", 12, 12, 12, 12, ColorSurface1, new Color(0.16f, 0.21f, 0.24f), 10);
+            _sprProgressTrack = LoadSprite("progress_track_bg", 4, 4, 4, 4, new Color(0.078f, 0.102f, 0.122f), Color.clear, 3);
+            _sprProgressFill = LoadSprite("progress_fill_cyan", 4, 4, 4, 4, AccentCyan, Color.clear, 3);
+            _sprAccentBar = LoadSprite("card_accent_bar", 2, 2, 2, 2, Color.white, Color.clear, 2);
+            _sprDivider = LoadSprite("divider_vertical_line", 1, 1, 1, 1, ColorBorder, Color.clear, 0);
+            _sprStatusDot = LoadSprite("status_dot_indicator", 0, 0, 0, 0, AccentGreen, Color.clear, 0);
+            _sprArrowCollapse = LoadSprite("icon_arrow_collapse", 0, 0, 0, 0, AccentCyan, Color.clear, 0);
+        }
+
+        static Sprite LoadSprite(string name, int l, int b, int r, int t, Color fallbackFill, Color fallbackStroke, int radius)
+        {
+            Sprite sp = Resources.Load<Sprite>("UI/Sprites/" + name);
+            if (sp != null) return sp;
+
+            Texture2D tex = Resources.Load<Texture2D>("UI/Sprites/" + name);
+            if (tex != null)
+            {
+                return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(l, b, r, t));
+            }
+
+            int size = Mathf.Max(32, radius * 2 + 4);
+            Texture2D pTex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            pTex.filterMode = FilterMode.Bilinear;
+            Color[] cols = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    bool isBorder = (x == 0 || y == 0 || x == size - 1 || y == size - 1);
+                    cols[y * size + x] = (isBorder && fallbackStroke.a > 0.05f) ? fallbackStroke : fallbackFill;
+                }
+            }
+            pTex.SetPixels(cols);
+            pTex.Apply();
+            return Sprite.Create(pTex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(l, b, r, t));
+        }
+
         static Font LoadFont()
         {
-            Font font = null;
-            try { font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); }
-            catch { }
+            Font font = Resources.Load<Font>("UI/Fonts/Bahnschrift");
             if (font != null) return font;
-            try { font = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
-            catch { }
+            try { font = Font.CreateDynamicFontFromOSFont("Bahnschrift", 14); } catch { }
+            if (font != null) return font;
+            try { font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); } catch { }
+            if (font != null) return font;
+            try { font = Resources.GetBuiltinResource<Font>("Arial.ttf"); } catch { }
             return font;
         }
 
+        // ------------------------------------------------------------- Build
         void Build()
         {
-            // Без EventSystem кнопки не нажимаются. В сцене его нет, поэтому создаём here.
             if (EventSystem.current == null)
             {
                 var events = new GameObject("EventSystem");
@@ -134,159 +235,328 @@ namespace Game.Factory
             var canvasGo = new GameObject("HUD", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             var canvas = canvasGo.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.pixelPerfect = true;
 
             var scaler = canvasGo.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.referenceResolution = new Vector2(1440f, 900f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0.5f;
 
             RectTransform root = canvasGo.GetComponent<RectTransform>();
 
-            BuildTopBar(root);
-            BuildBanner(root);
-            BuildSidebar(root);
-            BuildTable(root);
-            BuildTutorial(root);
-            BuildHintCard(root);
-            BuildGameOver(root);
+            // 1. Под-канвас для TopBar (изоляция ребилда при начислении монет)
+            RectTransform topBarCanvas = CreateSubCanvas(root, "SubCanvas_TopBar");
+            BuildTopBar(topBarCanvas);
+
+            // 2. Под-канвас для баннеров (План дня и Совет директору)
+            RectTransform bannerCanvas = CreateSubCanvas(root, "SubCanvas_Banners");
+            BuildBanner(bannerCanvas);
+            BuildHintCard(bannerCanvas);
+
+            // 3. Под-канвас для сайдбара с карточками (изоляция анимации выезда)
+            RectTransform sidebarCanvas = CreateSubCanvas(root, "SubCanvas_Sidebar");
+            BuildSidebar(sidebarCanvas);
+
+            // 4. Под-канвас для модальных окон
+            RectTransform modalCanvas = CreateSubCanvas(root, "SubCanvas_Modals");
+            BuildTable(modalCanvas);
+            BuildTutorial(modalCanvas);
+            BuildGameOver(modalCanvas);
         }
 
+        static RectTransform CreateSubCanvas(RectTransform parent, string name)
+        {
+            RectTransform rect = NewRect(parent, name);
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.sizeDelta = Vector2.zero;
+            rect.anchoredPosition = Vector2.zero;
+
+            var c = rect.gameObject.AddComponent<Canvas>();
+            c.overrideSorting = false;
+            rect.gameObject.AddComponent<GraphicRaycaster>();
+            return rect;
+        }
+
+        // ------------------------------------------------------------- TopBar
         void BuildTopBar(RectTransform root)
         {
-            // Верхняя полоса: деньги, день, план, смена, энергия, склады, топливо.
-            // Координаты X — просто подбор ширины, ничего умного тут нет.
-            RectTransform bar = NewRect(root, "Top Bar");
+            RectTransform bar = NewRect(root, "TopBar");
             bar.anchorMin = new Vector2(0f, 1f);
             bar.anchorMax = new Vector2(1f, 1f);
             bar.pivot = new Vector2(0.5f, 1f);
-            bar.anchoredPosition = Vector2.zero;
-            bar.sizeDelta = new Vector2(0f, 74f);
-            AddImage(bar, Panel);
+            bar.anchoredPosition = new Vector2(0f, -14f);
+            bar.sizeDelta = new Vector2(-40f, 48f);
+            AddSlicedImage(bar, _sprTopBarBg);
 
-            _money = Stat(bar, "Money", 20f, 150f, "$ 250", new Color(1f, 0.83f, 0.33f), 30, FontStyle.Bold);
-            _day = Stat(bar, "Day", 175f, 130f, "ДЕНЬ 1", TextColor, 23, FontStyle.Bold);
-            _plan = Stat(bar, "Plan", 310f, 270f, "ПЛАН 0/3", new Color(0.85f, 0.90f, 1f), 21, FontStyle.Bold);
-            _phase = Stat(bar, "Phase", 585f, 170f, "СМЕНА 40.0с", new Color(0.75f, 0.85f, 1f), 21, FontStyle.Normal);
-            _energy = Stat(bar, "Energy", 760f, 180f, "ЭНЕРГИЯ 6 / 8", new Color(0.55f, 0.9f, 0.6f), 21, FontStyle.Bold);
-            _materials = Stat(bar, "Materials", 950f, 215f, "МАТ 0/30 · ТОВ 0/30", TextColor, 19, FontStyle.Normal);
-            _upkeep = Stat(bar, "Upkeep", 1170f, 220f, "ТОПЛИВО $20/день", new Color(0.95f, 0.78f, 0.42f), 20, FontStyle.Normal);
+            // Ресурсы слева
+            float curX = 18f;
+            _money = Stat(bar, "Money", ref curX, 90f, "$ 250", TextWhite, 22, FontStyle.Bold);
+            AddDivider(bar, ref curX);
 
-            Button tutorial = NewButton(bar, "Tutorial", "ОБУЧЕНИЕ", new Color(0.24f, 0.62f, 0.55f), 17);
-            RectTransform tutRect = tutorial.GetComponent<RectTransform>();
-            tutRect.anchorMin = new Vector2(1f, 0.5f);
-            tutRect.anchorMax = new Vector2(1f, 0.5f);
-            tutRect.pivot = new Vector2(1f, 0.5f);
-            tutRect.anchoredPosition = new Vector2(-332f, 0f);
-            tutRect.sizeDelta = new Vector2(150f, 42f);
-            tutorial.onClick.AddListener(ToggleTutorial);
-            _tutorialButtonLabel = tutorial.GetComponentInChildren<Text>();
+            _day = Stat(bar, "Day", ref curX, 64f, "ДЕНЬ 1", TextWhite, 14, FontStyle.Bold);
+            AddDivider(bar, ref curX);
 
-            Button table = NewButton(bar, "Table", "ТАБЛИЦА", new Color(0.28f, 0.45f, 0.72f), 17);
-            RectTransform tableRect = table.GetComponent<RectTransform>();
-            tableRect.anchorMin = new Vector2(1f, 0.5f);
-            tableRect.anchorMax = new Vector2(1f, 0.5f);
-            tableRect.pivot = new Vector2(1f, 0.5f);
-            tableRect.anchoredPosition = new Vector2(-168f, 0f);
-            tableRect.sizeDelta = new Vector2(150f, 42f);
+            _plan = Stat(bar, "Plan", ref curX, 72f, "ПЛАН 0/3", AccentCyan, 13, FontStyle.Bold);
+            
+            // Прогресс-бар плана
+            RectTransform track = NewRect(bar, "PlanTrack");
+            track.anchorMin = new Vector2(0f, 0.5f);
+            track.anchorMax = new Vector2(0f, 0.5f);
+            track.pivot = new Vector2(0f, 0.5f);
+            track.anchoredPosition = new Vector2(curX, 0f);
+            track.sizeDelta = new Vector2(70f, 6f);
+            AddSlicedImage(track, _sprProgressTrack);
+
+            _planProgressBar = NewRect(track, "PlanFill");
+            _planProgressBar.anchorMin = new Vector2(0f, 0f);
+            _planProgressBar.anchorMax = new Vector2(0f, 1f);
+            _planProgressBar.pivot = new Vector2(0f, 0.5f);
+            _planProgressBar.anchoredPosition = Vector2.zero;
+            _planProgressBar.sizeDelta = new Vector2(0f, 0f);
+            Image fillImg = _planProgressBar.gameObject.AddComponent<Image>();
+            fillImg.color = AccentCyan;
+            fillImg.raycastTarget = false;
+            curX += 78f;
+
+            AddDivider(bar, ref curX);
+
+            _phase = Stat(bar, "Phase", ref curX, 92f, "СМЕНА 40.0с", TextMuted, 13, FontStyle.Normal);
+            AddDivider(bar, ref curX);
+
+            // Индикатор энергии
+            RectTransform dotRect = NewRect(bar, "EnergyDot");
+            dotRect.anchorMin = new Vector2(0f, 0.5f);
+            dotRect.anchorMax = new Vector2(0f, 0.5f);
+            dotRect.pivot = new Vector2(0f, 0.5f);
+            dotRect.anchoredPosition = new Vector2(curX, 0f);
+            dotRect.sizeDelta = new Vector2(8f, 8f);
+            _energyDot = dotRect.gameObject.AddComponent<Image>();
+            _energyDot.sprite = _sprStatusDot;
+            _energyDot.color = AccentGreen;
+            _energyDot.raycastTarget = false;
+            curX += 14f;
+
+            _energy = Stat(bar, "Energy", ref curX, 100f, "ЭНЕРГИЯ 6 / 8", AccentGreen, 13, FontStyle.Bold);
+            AddDivider(bar, ref curX);
+
+            _materials = Stat(bar, "Materials", ref curX, 136f, "МАТ 0/30 • ТОВ 0/30", TextMuted, 13, FontStyle.Normal);
+            AddDivider(bar, ref curX);
+
+            _upkeep = Stat(bar, "Upkeep", ref curX, 130f, "ТОПЛИВО $20/день", TextMuted, 13, FontStyle.Normal);
+
+            // Кнопки справа (строго центрированные)
+            Button restart = NewButton(bar, "Restart", "ЗАНОВО", Color.white, 12, _sprBtnRed);
+            SetRect(restart.GetComponent<RectTransform>(), new Vector2(-14f, 0f), new Vector2(80f, 32f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
+            restart.onClick.AddListener(delegate { _game.Restart(); });
+
+            Button table = NewButton(bar, "Table", "ТАБЛИЦА", Color.white, 12, _sprBtnNeutral);
+            SetRect(table.GetComponent<RectTransform>(), new Vector2(-102f, 0f), new Vector2(88f, 32f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
             table.onClick.AddListener(ToggleTable);
             _tableButtonLabel = table.GetComponentInChildren<Text>();
 
-            Button restart = NewButton(bar, "Restart", "ЗАНОВО", new Color(0.32f, 0.35f, 0.42f), 17);
-            RectTransform rect = restart.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(1f, 0.5f);
-            rect.anchorMax = new Vector2(1f, 0.5f);
-            rect.pivot = new Vector2(1f, 0.5f);
-            rect.anchoredPosition = new Vector2(-14f, 0f);
-            rect.sizeDelta = new Vector2(140f, 42f);
-            restart.onClick.AddListener(delegate { _game.Restart(); });
+            Button tutorial = NewButton(bar, "Tutorial", "ОБУЧЕНИЕ", Color.white, 12, _sprBtnNeutral);
+            SetRect(tutorial.GetComponent<RectTransform>(), new Vector2(-198f, 0f), new Vector2(90f, 32f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
+            tutorial.onClick.AddListener(ToggleTutorial);
+            _tutorialButtonLabel = tutorial.GetComponentInChildren<Text>();
         }
 
-        Text Stat(RectTransform parent, string name, float x, float width, string value, Color color, int size, FontStyle style)
+        void AddDivider(RectTransform parent, ref float curX)
+        {
+            RectTransform sep = NewRect(parent, "Sep");
+            sep.anchorMin = new Vector2(0f, 0.5f);
+            sep.anchorMax = new Vector2(0f, 0.5f);
+            sep.pivot = new Vector2(0f, 0.5f);
+            sep.anchoredPosition = new Vector2(curX, 0f);
+            sep.sizeDelta = new Vector2(1f, 24f);
+            AddSlicedImage(sep, _sprDivider);
+            curX += 16f;
+        }
+
+        Text Stat(RectTransform parent, string name, ref float curX, float width, string value, Color color, int size, FontStyle style)
         {
             Text text = NewText(parent, name, value, size, color, TextAnchor.MiddleLeft);
             RectTransform rect = text.rectTransform;
-            rect.anchorMin = new Vector2(0f, 0f);
-            rect.anchorMax = new Vector2(0f, 1f);
+            rect.anchorMin = new Vector2(0f, 0.5f);
+            rect.anchorMax = new Vector2(0f, 0.5f);
             rect.pivot = new Vector2(0f, 0.5f);
-            rect.anchoredPosition = new Vector2(x, 0f);
-            rect.sizeDelta = new Vector2(width, 0f);
+            rect.anchoredPosition = new Vector2(curX, 0f);
+            rect.sizeDelta = new Vector2(width, 30f);
             text.fontStyle = style;
+            curX += width;
             return text;
         }
 
+        // ------------------------------------------------------------- Banners
         void BuildBanner(RectTransform root)
         {
-            _banner = NewText(root, "Banner", "", 25, TextColor, TextAnchor.MiddleCenter);
-            RectTransform rect = _banner.rectTransform;
-            rect.anchorMin = new Vector2(0.5f, 1f);
-            rect.anchorMax = new Vector2(0.5f, 1f);
-            rect.pivot = new Vector2(0.5f, 1f);
-            rect.anchoredPosition = new Vector2(-180f, -84f);
-            rect.sizeDelta = new Vector2(1200f, 48f);
-            _banner.fontStyle = FontStyle.Bold;
+            // Плашка плана дня по центру
+            RectTransform planContainer = NewRect(root, "DailyPlanBanner");
+            planContainer.anchorMin = new Vector2(0.5f, 1f);
+            planContainer.anchorMax = new Vector2(0.5f, 1f);
+            planContainer.pivot = new Vector2(0.5f, 1f);
+            planContainer.anchoredPosition = new Vector2(0f, -68f);
+            planContainer.sizeDelta = new Vector2(560f, 30f);
+            AddSlicedImage(planContainer, _sprBannerPlanBg);
 
-            // Под баннером висит расшифровка плана: какие детали и сколько нужно сделать.
-            // Строка длинная, поэтому вынес её отдельно, в топбар она не влезала.
-            _planDetail = NewText(root, "Plan Detail", "", 18, new Color(0.85f, 0.90f, 1f), TextAnchor.MiddleCenter);
-            RectTransform planRect = _planDetail.rectTransform;
-            planRect.anchorMin = new Vector2(0.5f, 1f);
-            planRect.anchorMax = new Vector2(0.5f, 1f);
-            planRect.pivot = new Vector2(0.5f, 1f);
-            planRect.anchoredPosition = new Vector2(-180f, -134f);
-            planRect.sizeDelta = new Vector2(1200f, 30f);
+            _planDetail = NewText(planContainer, "PlanDetailText", "", 12, new Color(0.56f, 0.81f, 1f), TextAnchor.MiddleCenter);
+            _planDetail.rectTransform.anchorMin = Vector2.zero;
+            _planDetail.rectTransform.anchorMax = Vector2.one;
+            _planDetail.rectTransform.sizeDelta = Vector2.zero;
+            _planDetail.rectTransform.anchoredPosition = Vector2.zero;
         }
 
+        void BuildHintCard(RectTransform root)
+        {
+            // Плашка «Совет директору» в левом нижнем углу
+            _hintCard = NewRect(root, "AdvicePanel").gameObject;
+            RectTransform rect = _hintCard.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(0f, 0f);
+            rect.pivot = new Vector2(0f, 0f);
+            rect.anchoredPosition = new Vector2(24f, 20f);
+            rect.sizeDelta = new Vector2(440f, 68f);
+            AddSlicedImage(rect, _sprBannerAdviceBg);
+
+            _hintTitle = NewText(rect, "AdviceTitle", "СОВЕТ ДИРЕКТОРУ", 12, AccentAmber, TextAnchor.UpperLeft);
+            SetRect(_hintTitle.rectTransform, new Vector2(16f, -12f), new Vector2(370f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            _hintTitle.fontStyle = FontStyle.Bold;
+
+            // Кнопка закрытия/скрытия совета
+            Button closeBtn = NewButton(rect, "CloseAdviceBtn", "✕", TextMuted, 12, null);
+            RectTransform closeRect = closeBtn.GetComponent<RectTransform>();
+            closeRect.anchorMin = new Vector2(1f, 1f);
+            closeRect.anchorMax = new Vector2(1f, 1f);
+            closeRect.pivot = new Vector2(1f, 1f);
+            closeRect.anchoredPosition = new Vector2(-8f, -8f);
+            closeRect.sizeDelta = new Vector2(24f, 24f);
+            closeBtn.onClick.AddListener(delegate { SetAdviceVisible(false); });
+
+            _hintText = NewText(rect, "AdviceBody", "", 12, TextMuted, TextAnchor.UpperLeft);
+            SetRect(_hintText.rectTransform, new Vector2(16f, -32f), new Vector2(408f, 32f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            _hintText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _hintText.verticalOverflow = VerticalWrapMode.Truncate;
+
+            // Свернутая кнопка для повторного открытия совета
+            _hintMinimizedBtn = NewButton(root, "AdviceMinimizedBtn", "💡 СОВЕТ ДИРЕКТОРУ", AccentAmber, 11, _sprBannerAdviceBg);
+            RectTransform minRect = _hintMinimizedBtn.GetComponent<RectTransform>();
+            minRect.anchorMin = new Vector2(0f, 0f);
+            minRect.anchorMax = new Vector2(0f, 0f);
+            minRect.pivot = new Vector2(0f, 0f);
+            minRect.anchoredPosition = new Vector2(24f, 20f);
+            minRect.sizeDelta = new Vector2(165f, 30f);
+            _hintMinimizedBtn.onClick.AddListener(delegate { SetAdviceVisible(true); });
+            _hintMinimizedBtn.gameObject.SetActive(false);
+        }
+
+        public void SetAdviceVisible(bool visible)
+        {
+            _adviceVisible = visible;
+            if (_hintCard != null) _hintCard.SetActive(_adviceVisible);
+            if (_hintMinimizedBtn != null) _hintMinimizedBtn.gameObject.SetActive(!_adviceVisible);
+        }
+
+        // ------------------------------------------------------------- Sidebar
         void BuildSidebar(RectTransform root)
         {
-            // Правая панель шириной 400. Карточки шириной 376 — 12 отступ слева,
-            // 12 справа. Если менять ширину панели, придётся править и карточки.
-            RectTransform panel = NewRect(root, "Sidebar");
-            panel.anchorMin = new Vector2(1f, 1f);
-            panel.anchorMax = new Vector2(1f, 1f);
-            panel.pivot = new Vector2(1f, 1f);
-            panel.anchoredPosition = new Vector2(-16f, -84f);
-            panel.sizeDelta = new Vector2(400f, 850f);
-            AddImage(panel, Panel);
+            _sidebarPanel = NewRect(root, "SidebarPanel");
+            _sidebarPanel.anchorMin = new Vector2(1f, 0f);
+            _sidebarPanel.anchorMax = new Vector2(1f, 1f);
+            _sidebarPanel.pivot = new Vector2(1f, 0.5f);
+            _sidebarPanel.anchoredPosition = new Vector2(-20f, -6f);
+            _sidebarPanel.sizeDelta = new Vector2(SidebarWidth, -84f);
+            AddSlicedImage(_sidebarPanel, _sprSidebarBg);
 
-            BuildTabs(panel);
+            _sidebarCurrentX = -20f;
+            _sidebarTargetX = -20f;
 
+            // Кнопка сворачивания сайдбара
+            Button toggleBtn = NewButton(_sidebarPanel, "ToggleCollapse", "", Color.white, 12, _sprSidebarToggle);
+            RectTransform toggleRect = toggleBtn.GetComponent<RectTransform>();
+            toggleRect.anchorMin = new Vector2(0f, 0.5f);
+            toggleRect.anchorMax = new Vector2(0f, 0.5f);
+            toggleRect.pivot = new Vector2(1f, 0.5f);
+            toggleRect.anchoredPosition = new Vector2(0f, 0f);
+            toggleRect.sizeDelta = new Vector2(36f, 56f);
+            toggleBtn.onClick.AddListener(ToggleSidebar);
+
+            // Иконка стрелочки
+            RectTransform arrowRect = NewRect(toggleRect, "Arrow");
+            arrowRect.anchorMin = new Vector2(0.5f, 0.5f);
+            arrowRect.anchorMax = new Vector2(0.5f, 0.5f);
+            arrowRect.pivot = new Vector2(0.5f, 0.5f);
+            arrowRect.sizeDelta = new Vector2(14f, 14f);
+            Image arrowImg = arrowRect.gameObject.AddComponent<Image>();
+            arrowImg.sprite = _sprArrowCollapse;
+            arrowImg.color = AccentCyan;
+            arrowImg.raycastTarget = false;
+            _sidebarToggleArrow = arrowRect;
+
+            // Точка статуса на кнопке
+            RectTransform dotBadge = NewRect(toggleRect, "StatusDot");
+            dotBadge.anchorMin = new Vector2(1f, 1f);
+            dotBadge.anchorMax = new Vector2(1f, 1f);
+            dotBadge.pivot = new Vector2(1f, 1f);
+            dotBadge.anchoredPosition = new Vector2(-6f, -6f);
+            dotBadge.sizeDelta = new Vector2(6f, 6f);
+            Image dotImg = dotBadge.gameObject.AddComponent<Image>();
+            dotImg.sprite = _sprStatusDot;
+            dotImg.color = AccentGreen;
+            dotImg.raycastTarget = false;
+
+            // Вкладки линий
+            BuildTabs(_sidebarPanel);
+
+            // Карточки оборудования
             string[] titles = { "ЗАКУПЩИК", "ПРОИЗВОДИТЕЛЬ", "ПРОДАВЕЦ" };
-            Color[] colors = { BuyerColor, ProducerColor, SellerColor };
-            float[] tops = { 62f, 178f, 306f };
-            float[] heights = { 108f, 120f, 108f };
+            Color[] colors = { AccentAmber, AccentCyan, AccentGreen };
+            float[] tops = { 64f, 154f, 244f };
 
             for (int i = 0; i < 3; i++)
             {
                 MachineKind kind = (MachineKind)i;
-                _cards[i] = BuildCard(panel, titles[i], colors[i], 12f, tops[i], 376f, heights[i],
+                _cards[i] = BuildCard(_sidebarPanel, titles[i], colors[i], 14f, tops[i], 312f, 82f, _sprCardMachineBase,
                     delegate { _game.UpgradeMachine(_selected, kind); });
             }
 
-            _generators[0] = BuildCard(panel, "ГЕНЕРАТОР 1", GeneratorColor, 12f, 422f, 376f, 96f,
+            _generators[0] = BuildCard(_sidebarPanel, "ГЕНЕРАТОР 1", AccentGreen, 14f, 334f, 312f, 82f, _sprCardMachineBase,
                 delegate { _game.UpgradeGenerator(0); });
-            _generators[1] = BuildCard(panel, "ГЕНЕРАТОР 2", GeneratorColor, 12f, 526f, 376f, 96f,
+            _generators[1] = BuildCard(_sidebarPanel, "ГЕНЕРАТОР 2", AccentGreen, 14f, 424f, 312f, 82f, _sprCardMachineBase,
                 delegate { _game.UpgradeGenerator(1); });
 
             for (int i = 0; i < _assemblyCards.Length; i++)
             {
-                int index = i; // без локальной копии лямбда подхватит последний i
-                _assemblyCards[i] = BuildCard(panel, "СБОРКА · " + Recipes.All[i].Name.ToUpper(),
-                    new Color(0.95f, 0.58f, 0.72f), 12f, tops[i], 376f, heights[i],
+                int index = i;
+                _assemblyCards[i] = BuildCard(_sidebarPanel, "СБОРКА · " + Recipes.All[i].Name.ToUpper(),
+                    AccentPink, 14f, tops[i], 312f, 82f, _sprCardAssemblyBase,
                     delegate { _game.AssemblyAction(index); });
-                _assemblyCards[i].Title.fontSize = 16;
-                _assemblyCards[i].Title.rectTransform.sizeDelta = new Vector2(230f, 26f);
             }
 
-            _build = BuildCard(panel, "НОВАЯ ЛИНИЯ", new Color(0.50f, 0.72f, 0.98f), 12f, 734f, 376f, 96f,
+            _build = BuildCard(_sidebarPanel, "НОВАЯ ЛИНИЯ", AccentPurple, 14f, 514f, 312f, 82f, _sprCardMachineBase,
                 delegate { _game.BuildLine(_buildTarget); });
+        }
+
+        public void ToggleSidebar()
+        {
+            _sidebarCollapsed = !_sidebarCollapsed;
+            _sidebarTargetX = _sidebarCollapsed ? (SidebarWidth + 10f) : -20f;
         }
 
         void BuildTabs(RectTransform parent)
         {
-            // 3 линии + вкладка сборки. Ширину поджал, иначе «СБОРКА» не влезала.
+            RectTransform tabContainer = NewRect(parent, "TabsContainer");
+            tabContainer.anchorMin = new Vector2(0f, 1f);
+            tabContainer.anchorMax = new Vector2(1f, 1f);
+            tabContainer.pivot = new Vector2(0.5f, 1f);
+            tabContainer.anchoredPosition = new Vector2(0f, -14f);
+            tabContainer.sizeDelta = new Vector2(-28f, 38f);
+            AddSlicedImage(tabContainer, _sprTabContainerBg);
+
             _tabs = new Button[ProductInfo.Count + 1];
-            float width = 88f;
-            float gap = 6f;
+            float tabWidth = 74f;
+            float startX = 4f;
+            float gap = 4f;
 
             for (int i = 0; i < _tabs.Length; i++)
             {
@@ -295,309 +565,199 @@ namespace Game.Factory
                     ? ProductInfo.ShortName((ProductKind)i)
                     : "СБОРКА";
 
-                Button tab = NewButton(parent, "Tab " + i, label, Dim, 14);
+                Button tab = NewButton(tabContainer, "Tab " + i, label, Color.white, 12, null);
                 RectTransform rect = tab.GetComponent<RectTransform>();
-                rect.anchorMin = new Vector2(0f, 1f);
-                rect.anchorMax = new Vector2(0f, 1f);
-                rect.pivot = new Vector2(0f, 1f);
-                rect.anchoredPosition = new Vector2(12f + i * (width + gap), -12f);
-                rect.sizeDelta = new Vector2(width, 38f);
+                rect.anchorMin = new Vector2(0f, 0.5f);
+                rect.anchorMax = new Vector2(0f, 0.5f);
+                rect.pivot = new Vector2(0f, 0.5f);
+                rect.anchoredPosition = new Vector2(startX + i * (tabWidth + gap), 0f);
+                rect.sizeDelta = new Vector2(tabWidth, 32f);
                 tab.onClick.AddListener(delegate { _selected = index; });
                 _tabs[i] = tab;
             }
         }
 
-        // Универсальная карточка: цветная полоска слева, заголовок, уровень,
-        // две строки текста и кнопка справа снизу. Всё остальное — копипаста.
-        Card BuildCard(RectTransform parent, string title, Color accent, float x, float top, float width, float height, UnityEngine.Events.UnityAction onClick)
+        Card BuildCard(RectTransform parent, string title, Color accent, float x, float top, float width, float height, Sprite bgSprite, UnityEngine.Events.UnityAction onClick)
         {
             var card = new Card { Accent = accent };
 
             RectTransform rect = NewRect(parent, "Card " + title);
-            AddImage(rect, CardColor);
+            AddSlicedImage(rect, bgSprite);
             rect.anchorMin = new Vector2(0f, 1f);
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = new Vector2(x, -top);
             rect.sizeDelta = new Vector2(width, height);
             card.Root = rect;
+            card.Background = rect.GetComponent<Image>();
 
+            // Акцентная полоска слева (4px)
             RectTransform stripe = NewRect(rect, "Stripe");
-            stripe.anchorMin = new Vector2(0f, 0f);
-            stripe.anchorMax = new Vector2(0f, 1f);
+            stripe.anchorMin = new Vector2(0f, 0.5f);
+            stripe.anchorMax = new Vector2(0f, 0.5f);
             stripe.pivot = new Vector2(0f, 0.5f);
-            stripe.anchoredPosition = Vector2.zero;
-            stripe.sizeDelta = new Vector2(5f, 0f);
-            AddImage(stripe, accent);
+            stripe.anchoredPosition = new Vector2(4f, 0f);
+            stripe.sizeDelta = new Vector2(4f, height - 24f);
+            card.Stripe = stripe.gameObject.AddComponent<Image>();
+            card.Stripe.sprite = _sprAccentBar;
+            card.Stripe.type = Image.Type.Sliced;
+            card.Stripe.color = accent;
+            card.Stripe.raycastTarget = false;
 
-            card.Title = NewText(rect, "Title", title, 20, accent, TextAnchor.UpperLeft);
-            SetRect(card.Title.rectTransform, new Vector2(16f, -8f), new Vector2(260f, 26f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            // Заголовок карточки
+            card.Title = NewText(rect, "Title", title, 13, TextWhite, TextAnchor.UpperLeft);
+            SetRect(card.Title.rectTransform, new Vector2(16f, -10f), new Vector2(190f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             card.Title.fontStyle = FontStyle.Bold;
 
-            card.Level = NewText(rect, "Level", "Lv 1", 18, TextColor, TextAnchor.UpperRight);
-            SetRect(card.Level.rectTransform, new Vector2(-12f, -8f), new Vector2(110f, 26f), new Vector2(1f, 1f), new Vector2(1f, 1f));
+            // Уровень / статус
+            card.Level = NewText(rect, "Level", "УР. 1", 11, TextMuted, TextAnchor.UpperRight);
+            SetRect(card.Level.rectTransform, new Vector2(-12f, -10f), new Vector2(80f, 18f), new Vector2(1f, 1f), new Vector2(1f, 1f));
 
-            card.Stats = NewText(rect, "Stats", "", 15, Muted, TextAnchor.UpperLeft);
-            SetRect(card.Stats.rectTransform, new Vector2(16f, -32f), new Vector2(346f, 40f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            card.Stats.horizontalOverflow = HorizontalWrapMode.Wrap;
-            card.Stats.verticalOverflow = VerticalWrapMode.Overflow;
+            // Характеристики (две строки)
+            card.Stats = NewText(rect, "Stats", "", 11, TextMuted, TextAnchor.UpperLeft);
+            SetRect(card.Stats.rectTransform, new Vector2(16f, -32f), new Vector2(180f, 20f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
-            card.Power = NewText(rect, "Power", "", 15, new Color(0.75f, 0.82f, 0.92f), TextAnchor.UpperLeft);
-            SetRect(card.Power.rectTransform, new Vector2(16f, -72f), new Vector2(190f, 22f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            card.Power = NewText(rect, "Power", "", 11, TextMuted, TextAnchor.UpperLeft);
+            SetRect(card.Power.rectTransform, new Vector2(16f, -50f), new Vector2(180f, 20f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
-            card.Button = NewButton(rect, "Upgrade", "УЛУЧШИТЬ", accent, 15);
-            RectTransform buttonRect = card.Button.GetComponent<RectTransform>();
-            buttonRect.anchorMin = new Vector2(1f, 0f);
-            buttonRect.anchorMax = new Vector2(1f, 0f);
-            buttonRect.pivot = new Vector2(1f, 0f);
-            buttonRect.anchoredPosition = new Vector2(-10f, 8f);
-            buttonRect.sizeDelta = new Vector2(160f, 32f);
+            // Кнопка действия (CTA)
+            card.Button = NewButton(rect, "ActionBtn", "УЛУЧШИТЬ", Color.white, 11, _sprBtnAmber);
+            card.ButtonImage = card.Button.GetComponent<Image>();
+            RectTransform btnRect = card.Button.GetComponent<RectTransform>();
+            btnRect.anchorMin = new Vector2(1f, 0.5f);
+            btnRect.anchorMax = new Vector2(1f, 0.5f);
+            btnRect.pivot = new Vector2(1f, 0.5f);
+            btnRect.anchoredPosition = new Vector2(-10f, -8f);
+            btnRect.sizeDelta = new Vector2(98f, 28f);
             card.ButtonLabel = card.Button.GetComponentInChildren<Text>();
             card.Button.onClick.AddListener(onClick);
+
             return card;
         }
 
+        // ------------------------------------------------------------- Modals
         void BuildTable(RectTransform root)
         {
-            // Таблица собрана руками, без LayoutGroup. Плюс: всё предсказуемо.
-            // Минус: если добавишь строку, придётся самому двигать итоги и журнал.
-            _table = NewRect(root, "Table").gameObject;
-            RectTransform shade = _table.GetComponent<RectTransform>();
-            shade.anchorMin = Vector2.zero;
-            shade.anchorMax = Vector2.one;
-            shade.offsetMin = Vector2.zero;
-            shade.offsetMax = Vector2.zero;
-            AddImage(shade, new Color(0.02f, 0.03f, 0.05f, 0.72f));
+            _table = NewRect(root, "TableModal").gameObject;
+            RectTransform rect = _table.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = new Vector2(0f, 0f);
+            rect.sizeDelta = new Vector2(760f, 520f);
+            AddSlicedImage(rect, _sprSidebarBg);
 
-            RectTransform panel = NewRect(shade, "Table Panel");
-            panel.anchorMin = new Vector2(0.5f, 0.5f);
-            panel.anchorMax = new Vector2(0.5f, 0.5f);
-            panel.pivot = new Vector2(0.5f, 0.5f);
-            panel.sizeDelta = new Vector2(920f, 720f);
-            AddImage(panel, new Color(0.09f, 0.10f, 0.13f, 0.99f));
-
-            Text title = NewText(panel, "Title", "МАТЕРИАЛЫ И ПРОДУКЦИЯ", 22, TextColor, TextAnchor.UpperLeft);
-            SetRect(title.rectTransform, new Vector2(24f, -18f), new Vector2(500f, 30f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            Text title = NewText(rect, "TableTitle", "СВОДКА ПРОИЗВОДСТВА", 18, TextWhite, TextAnchor.UpperLeft);
+            SetRect(title.rectTransform, new Vector2(24f, -18f), new Vector2(400f, 24f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             title.fontStyle = FontStyle.Bold;
 
-            Button close = NewButton(panel, "Close", "ЗАКРЫТЬ", new Color(0.32f, 0.35f, 0.42f), 15);
-            RectTransform closeRect = close.GetComponent<RectTransform>();
-            closeRect.anchorMin = new Vector2(1f, 1f);
-            closeRect.anchorMax = new Vector2(1f, 1f);
-            closeRect.pivot = new Vector2(1f, 1f);
-            closeRect.anchoredPosition = new Vector2(-18f, -16f);
-            closeRect.sizeDelta = new Vector2(140f, 34f);
+            Button close = NewButton(rect, "CloseTable", "ЗАКРЫТЬ", Color.white, 12, _sprBtnNeutral);
+            SetRect(close.GetComponent<RectTransform>(), new Vector2(-24f, -18f), new Vector2(90f, 30f), new Vector2(1f, 1f), new Vector2(1f, 1f));
             close.onClick.AddListener(ToggleTable);
 
-            string[] heads = { "ЛИНИЯ", "МАТЕРИАЛЫ", "ПРОДУКТЫ", "УРОВНИ", "ЦЕНА", "СТАТУС" };
-            float[] xs = { 24f, 220f, 340f, 460f, 660f, 760f };
-            float[] widths = { 190f, 115f, 115f, 195f, 95f, 120f };
-
-            for (int i = 0; i < heads.Length; i++)
-            {
-                Text head = NewText(panel, "Head " + i, heads[i], 15, new Color(0.55f, 0.72f, 0.95f), TextAnchor.UpperLeft);
-                SetRect(head.rectTransform, new Vector2(xs[i], -62f), new Vector2(widths[i], 22f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-                head.fontStyle = FontStyle.Bold;
-            }
-
-            // 3 линии + 3 сборки = 6 строк. Шаг 62, чтобы всё влезло без скролла
-            // (скролл делать было лень, честно).
+            // Табличная сетка
             _rows = new Row[ProductInfo.Count + Recipes.All.Length];
+            float startY = 70f;
+            float rowHeight = 32f;
+
+            // Заголовок таблицы
+            Text header = NewText(rect, "TableHeader", "ЛИНИЯ / УЗЕЛ        СЫРЬЁ        СКЛАД        УРОВНИ        ЦЕНА        СТАТУС", 12, AccentCyan, TextAnchor.UpperLeft);
+            SetRect(header.rectTransform, new Vector2(24f, -startY), new Vector2(710f, 20f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            header.fontStyle = FontStyle.Bold;
+            startY += 26f;
+
             for (int i = 0; i < _rows.Length; i++)
             {
-                float y = -92f - i * 62f;
-                RectTransform row = NewRect(panel, "Row " + i);
-                SetRect(row, new Vector2(16f, y), new Vector2(868f, 56f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-                AddImage(row, i % 2 == 0 ? new Color(0.13f, 0.145f, 0.18f, 0.95f) : new Color(0.10f, 0.115f, 0.145f, 0.95f));
+                Row row = new Row();
+                float y = startY + i * rowHeight;
 
-                _rows[i] = new Row();
-                Color tone = i < LineColors.Length ? LineColors[i] : new Color(0.95f, 0.58f, 0.72f);
-                _rows[i].Line = NewText(row, "Line", "", 18, tone, TextAnchor.MiddleLeft);
-                SetRect(_rows[i].Line.rectTransform, new Vector2(10f, 0f), new Vector2(190f, 48f), new Vector2(0f, 0f), new Vector2(0f, 1f));
-                _rows[i].Line.fontStyle = FontStyle.Bold;
+                row.Line = NewText(rect, "Line_" + i, "", 12, TextWhite, TextAnchor.MiddleLeft);
+                SetRect(row.Line.rectTransform, new Vector2(24f, -y), new Vector2(140f, 26f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
-                _rows[i].Materials = TableText(row, "Materials", 10f + 196f - 16f, 100f);
-                _rows[i].Products = TableText(row, "Products", 10f + 196f + 120f - 16f, 100f);
-                _rows[i].Levels = TableText(row, "Levels", 10f + 196f + 240f - 16f, 195f);
-                _rows[i].Price = TableText(row, "Price", 10f + 196f + 440f - 16f, 90f);
-                _rows[i].Status = TableText(row, "Status", 10f + 196f + 540f - 16f, 140f);
+                row.Materials = NewText(rect, "Mat_" + i, "", 12, TextMuted, TextAnchor.MiddleLeft);
+                SetRect(row.Materials.rectTransform, new Vector2(170f, -y), new Vector2(80f, 26f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
+                row.Products = NewText(rect, "Prod_" + i, "", 12, TextMuted, TextAnchor.MiddleLeft);
+                SetRect(row.Products.rectTransform, new Vector2(260f, -y), new Vector2(80f, 26f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
+                row.Levels = NewText(rect, "Lvl_" + i, "", 12, TextMuted, TextAnchor.MiddleLeft);
+                SetRect(row.Levels.rectTransform, new Vector2(350f, -y), new Vector2(90f, 26f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
+                row.Price = NewText(rect, "Price_" + i, "", 12, AccentAmber, TextAnchor.MiddleLeft);
+                SetRect(row.Price.rectTransform, new Vector2(450f, -y), new Vector2(80f, 26f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
+                row.Status = NewText(rect, "Status_" + i, "", 12, AccentGreen, TextAnchor.MiddleLeft);
+                SetRect(row.Status.rectTransform, new Vector2(540f, -y), new Vector2(180f, 26f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
+                _rows[i] = row;
             }
 
-            _tableTotals = NewText(panel, "Totals", "", 15, Muted, TextAnchor.UpperLeft);
-            SetRect(_tableTotals.rectTransform, new Vector2(24f, -462f), new Vector2(872f, 80f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            _tableTotals.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _tableTotals = NewText(rect, "TableTotals", "", 12, TextWhite, TextAnchor.UpperLeft);
+            SetRect(_tableTotals.rectTransform, new Vector2(24f, -310f), new Vector2(710f, 40f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
-            Text journalTitle = NewText(panel, "Journal Title", "ЖУРНАЛ", 15, new Color(0.55f, 0.72f, 0.95f), TextAnchor.UpperLeft);
-            SetRect(journalTitle.rectTransform, new Vector2(24f, -548f), new Vector2(300f, 22f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            journalTitle.fontStyle = FontStyle.Bold;
+            Text logHeader = NewText(rect, "LogHeader", "ЖУРНАЛ СОБЫТИЙ", 12, AccentCyan, TextAnchor.UpperLeft);
+            SetRect(logHeader.rectTransform, new Vector2(24f, -360f), new Vector2(300f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            logHeader.fontStyle = FontStyle.Bold;
 
-            _journal = NewText(panel, "Journal", "", 15, Muted, TextAnchor.UpperLeft);
-            SetRect(_journal.rectTransform, new Vector2(24f, -572f), new Vector2(872f, 88f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            _journal.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _journal.verticalOverflow = VerticalWrapMode.Truncate;
-
-            Text note = NewText(panel, "Note",
-                "Закупщик берёт материалы за деньги. Производитель ждёт материалы, продавец ждёт готовый товар.\n" +
-                "Каждая линия — отдельные машины, отдельный склад и отдельные улучшения. Сборка ест готовые детали линий.",
-                14, new Color(0.52f, 0.57f, 0.65f), TextAnchor.LowerLeft);
-            SetRect(note.rectTransform, new Vector2(24f, 10f), new Vector2(872f, 42f), new Vector2(0f, 0f), new Vector2(0f, 0f));
+            _journal = NewText(rect, "Journal", "", 11, TextMuted, TextAnchor.UpperLeft);
+            SetRect(_journal.rectTransform, new Vector2(24f, -384f), new Vector2(710f, 110f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
             _table.SetActive(false);
         }
 
-        Text TableText(RectTransform row, string name, float x, float width)
-        {
-            Text text = NewText(row, name, "", 16, TextColor, TextAnchor.MiddleLeft);
-            SetRect(text.rectTransform, new Vector2(x, 0f), new Vector2(width, 50f), new Vector2(0f, 0f), new Vector2(0f, 1f));
-            return text;
-        }
-
-        void BuildGameOver(RectTransform root)
-        {
-            _gameOver = NewRect(root, "Game Over").gameObject;
-            RectTransform shade = _gameOver.GetComponent<RectTransform>();
-            shade.anchorMin = Vector2.zero;
-            shade.anchorMax = Vector2.one;
-            shade.offsetMin = Vector2.zero;
-            shade.offsetMax = Vector2.zero;
-            AddImage(shade, new Color(0.02f, 0.03f, 0.05f, 0.88f));
-
-            RectTransform panel = NewRect(shade, "Panel");
-            panel.anchorMin = new Vector2(0.5f, 0.5f);
-            panel.anchorMax = new Vector2(0.5f, 0.5f);
-            panel.pivot = new Vector2(0.5f, 0.5f);
-            panel.sizeDelta = new Vector2(780f, 360f);
-            AddImage(panel, new Color(0.10f, 0.11f, 0.15f, 1f));
-
-            RectTransform stripe = NewRect(panel, "Stripe");
-            stripe.anchorMin = new Vector2(0f, 0f);
-            stripe.anchorMax = new Vector2(1f, 0f);
-            stripe.pivot = new Vector2(0.5f, 0f);
-            stripe.anchoredPosition = new Vector2(0f, 0f);
-            stripe.sizeDelta = new Vector2(0f, 6f);
-            AddImage(stripe, new Color(0.95f, 0.36f, 0.32f));
-
-            Text title = NewText(panel, "Title", "ПРОИЗВОДСТВО ОСТАНОВЛЕНО", 32, new Color(1f, 0.48f, 0.42f), TextAnchor.MiddleCenter);
-            SetRect(title.rectTransform, new Vector2(0f, -30f), new Vector2(780f, 48f), new Vector2(0f, 1f), new Vector2(1f, 1f));
-            title.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            title.rectTransform.anchoredPosition = new Vector2(0f, -54f);
-
-            _gameOverText = NewText(panel, "Text", "", 19, new Color(0.80f, 0.85f, 0.92f), TextAnchor.UpperCenter);
-            SetRect(_gameOverText.rectTransform, new Vector2(0f, -108f), new Vector2(700f, 130f), new Vector2(0f, 1f), new Vector2(1f, 1f));
-            _gameOverText.rectTransform.pivot = new Vector2(0.5f, 1f);
-            _gameOverText.rectTransform.anchoredPosition = new Vector2(0f, -108f);
-            _gameOverText.horizontalOverflow = HorizontalWrapMode.Wrap;
-
-            Button restart = NewButton(panel, "Restart", "НАЧАТЬ ЗАНОВО", new Color(0.55f, 0.78f, 0.50f), 19);
-            RectTransform restartRect = restart.GetComponent<RectTransform>();
-            restartRect.anchorMin = new Vector2(0.5f, 0f);
-            restartRect.anchorMax = new Vector2(0.5f, 0f);
-            restartRect.pivot = new Vector2(0.5f, 0f);
-            restartRect.anchoredPosition = new Vector2(0f, 34f);
-            restartRect.sizeDelta = new Vector2(280f, 48f);
-            restart.onClick.AddListener(delegate { _game.Restart(); });
-
-            _gameOver.SetActive(false);
-        }
-
         void BuildTutorial(RectTransform root)
         {
-            // Обучалка — четыре шага. Тексты лежат прямо в SetTutorialStep,
-            // потому что выносить их в ассеты ради прототипа было лень.
-            _tutorial = NewRect(root, "Tutorial").gameObject;
-            RectTransform shade = _tutorial.GetComponent<RectTransform>();
-            shade.anchorMin = Vector2.zero;
-            shade.anchorMax = Vector2.one;
-            shade.offsetMin = Vector2.zero;
-            shade.offsetMax = Vector2.zero;
-            AddImage(shade, new Color(0.02f, 0.03f, 0.05f, 0.78f));
+            _tutorial = NewRect(root, "TutorialModal").gameObject;
+            RectTransform rect = _tutorial.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(680f, 460f);
+            AddSlicedImage(rect, _sprSidebarBg);
 
-            RectTransform panel = NewRect(shade, "Tutorial Panel");
-            panel.anchorMin = new Vector2(0.5f, 0.5f);
-            panel.anchorMax = new Vector2(0.5f, 0.5f);
-            panel.pivot = new Vector2(0.5f, 0.5f);
-            panel.sizeDelta = new Vector2(880f, 540f);
-            AddImage(panel, new Color(0.09f, 0.10f, 0.13f, 0.99f));
-
-            RectTransform stripe = NewRect(panel, "Stripe");
-            stripe.anchorMin = new Vector2(0f, 1f);
-            stripe.anchorMax = new Vector2(1f, 1f);
-            stripe.pivot = new Vector2(0.5f, 1f);
-            stripe.anchoredPosition = Vector2.zero;
-            stripe.sizeDelta = new Vector2(0f, 4f);
-            AddImage(stripe, new Color(0.24f, 0.62f, 0.55f));
-
-            Text title = NewText(panel, "Title", "ОБУЧЕНИЕ: КАК РАБОТАЕТ ЗАВОД", 22, TextColor, TextAnchor.UpperLeft);
-            SetRect(title.rectTransform, new Vector2(24f, -18f), new Vector2(500f, 30f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            title.fontStyle = FontStyle.Bold;
-
-            Button close = NewButton(panel, "Close", "ЗАКРЫТЬ", new Color(0.32f, 0.35f, 0.42f), 15);
-            RectTransform closeRect = close.GetComponent<RectTransform>();
-            closeRect.anchorMin = new Vector2(1f, 1f);
-            closeRect.anchorMax = new Vector2(1f, 1f);
-            closeRect.pivot = new Vector2(1f, 1f);
-            closeRect.anchoredPosition = new Vector2(-18f, -16f);
-            closeRect.sizeDelta = new Vector2(130f, 34f);
-            close.onClick.AddListener(ToggleTutorial);
-
-            string[] tabNames = { "1. ЦЕПОЧКА", "2. ЭНЕРГИЯ", "3. СМЕНЫ И ПЛАН", "4. РАЗВИТИЕ" };
-            _tutorialStepTabs = new Button[4];
-            float tabW = 202f;
-            for (int i = 0; i < 4; i++)
-            {
-                int idx = i;
-                Button stepTab = NewButton(panel, "StepTab " + i, tabNames[i], Dim, 15);
-                RectTransform tabRect = stepTab.GetComponent<RectTransform>();
-                SetRect(tabRect, new Vector2(24f + i * (tabW + 8f), -58f), new Vector2(tabW, 34f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-                stepTab.onClick.AddListener(delegate { SetTutorialStep(idx); });
-                _tutorialStepTabs[i] = stepTab;
-            }
-
-            RectTransform card = NewRect(panel, "Content Card");
-            SetRect(card, new Vector2(24f, -104f), new Vector2(832f, 350f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            AddImage(card, new Color(0.12f, 0.135f, 0.17f, 0.95f));
-
-            _tutorialStepTitle = NewText(card, "StepTitle", "", 20, new Color(0.95f, 0.96f, 0.98f), TextAnchor.UpperLeft);
-            SetRect(_tutorialStepTitle.rectTransform, new Vector2(18f, -14f), new Vector2(796f, 26f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            _tutorialStepTitle.fontStyle = FontStyle.Bold;
-
-            _tutorialSubTitle = NewText(card, "SubTitle", "", 15, Muted, TextAnchor.UpperLeft);
-            SetRect(_tutorialSubTitle.rectTransform, new Vector2(18f, -42f), new Vector2(796f, 22f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-
-            float[] blockTops = { 70f, 138f, 206f };
-            _tutorialPoint1Title = CreateBulletTitle(card, "P1Title", blockTops[0]);
-            _tutorialPoint1Desc = CreateBulletDesc(card, "P1Desc", blockTops[0]);
-
-            _tutorialPoint2Title = CreateBulletTitle(card, "P2Title", blockTops[1]);
-            _tutorialPoint2Desc = CreateBulletDesc(card, "P2Desc", blockTops[1]);
-
-            _tutorialPoint3Title = CreateBulletTitle(card, "P3Title", blockTops[2]);
-            _tutorialPoint3Desc = CreateBulletDesc(card, "P3Desc", blockTops[2]);
-
-            RectTransform tipBox = NewRect(card, "TipBox");
-            SetRect(tipBox, new Vector2(14f, 14f), new Vector2(804f, 54f), new Vector2(0f, 0f), new Vector2(0f, 0f));
-            AddImage(tipBox, new Color(0.08f, 0.09f, 0.11f, 0.95f));
-
-            RectTransform tipStripe = NewRect(tipBox, "TipStripe");
-            SetRect(tipStripe, Vector2.zero, new Vector2(4f, 54f), new Vector2(0f, 0f), new Vector2(0f, 1f));
-            AddImage(tipStripe, new Color(0.98f, 0.74f, 0.28f));
-
-            _tutorialTipText = NewText(tipBox, "TipText", "", 14, new Color(0.85f, 0.88f, 0.92f), TextAnchor.MiddleLeft);
-            SetRect(_tutorialTipText.rectTransform, new Vector2(14f, 0f), new Vector2(776f, 50f), new Vector2(0f, 0f), new Vector2(0f, 1f));
-            _tutorialTipText.horizontalOverflow = HorizontalWrapMode.Wrap;
-
-            _tutorialPrev = NewButton(panel, "Prev", "« НАЗАД", new Color(0.28f, 0.30f, 0.36f), 15);
-            RectTransform prevRect = _tutorialPrev.GetComponent<RectTransform>();
-            SetRect(prevRect, new Vector2(24f, 20f), new Vector2(150f, 40f), new Vector2(0f, 0f), new Vector2(0f, 0f));
-            _tutorialPrev.onClick.AddListener(delegate { SetTutorialStep(_tutorialStep - 1); });
-
-            _tutorialStepBadge = NewText(panel, "Badge", "ШАГ 1 ИЗ 4", 16, new Color(0.60f, 0.65f, 0.73f), TextAnchor.MiddleCenter);
-            SetRect(_tutorialStepBadge.rectTransform, new Vector2(190f, 20f), new Vector2(500f, 40f), new Vector2(0f, 0f), new Vector2(0f, 0f));
+            _tutorialStepBadge = NewText(rect, "Badge", "ШАГ 1 ИЗ 4", 12, AccentAmber, TextAnchor.UpperLeft);
+            SetRect(_tutorialStepBadge.rectTransform, new Vector2(24f, -20f), new Vector2(150f, 20f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             _tutorialStepBadge.fontStyle = FontStyle.Bold;
 
-            _tutorialNext = NewButton(panel, "Next", "ДАЛЕЕ »", new Color(0.24f, 0.62f, 0.55f), 15);
-            RectTransform nextRect = _tutorialNext.GetComponent<RectTransform>();
-            SetRect(nextRect, new Vector2(-24f, 20f), new Vector2(190f, 40f), new Vector2(1f, 0f), new Vector2(1f, 0f));
+            Button close = NewButton(rect, "CloseTutorial", "ЗАКРЫТЬ", Color.white, 12, _sprBtnNeutral);
+            SetRect(close.GetComponent<RectTransform>(), new Vector2(-24f, -16f), new Vector2(90f, 30f), new Vector2(1f, 1f), new Vector2(1f, 1f));
+            close.onClick.AddListener(ToggleTutorial);
+
+            _tutorialStepTitle = NewText(rect, "Title", "", 18, TextWhite, TextAnchor.UpperLeft);
+            SetRect(_tutorialStepTitle.rectTransform, new Vector2(24f, -46f), new Vector2(600f, 24f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            _tutorialStepTitle.fontStyle = FontStyle.Bold;
+
+            _tutorialSubTitle = NewText(rect, "Sub", "", 12, TextMuted, TextAnchor.UpperLeft);
+            SetRect(_tutorialSubTitle.rectTransform, new Vector2(24f, -74f), new Vector2(630f, 20f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
+            _tutorialPoint1Title = NewText(rect, "P1_T", "", 13, AccentCyan, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint1Title.rectTransform, new Vector2(24f, -106f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            _tutorialPoint1Title.fontStyle = FontStyle.Bold;
+            _tutorialPoint1Desc = NewText(rect, "P1_D", "", 12, TextMuted, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint1Desc.rectTransform, new Vector2(24f, -126f), new Vector2(630f, 36f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
+            _tutorialPoint2Title = NewText(rect, "P2_T", "", 13, AccentGreen, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint2Title.rectTransform, new Vector2(24f, -170f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            _tutorialPoint2Title.fontStyle = FontStyle.Bold;
+            _tutorialPoint2Desc = NewText(rect, "P2_D", "", 12, TextMuted, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint2Desc.rectTransform, new Vector2(24f, -190f), new Vector2(630f, 36f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
+            _tutorialPoint3Title = NewText(rect, "P3_T", "", 13, AccentPink, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint3Title.rectTransform, new Vector2(24f, -234f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            _tutorialPoint3Title.fontStyle = FontStyle.Bold;
+            _tutorialPoint3Desc = NewText(rect, "P3_D", "", 12, TextMuted, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint3Desc.rectTransform, new Vector2(24f, -254f), new Vector2(630f, 36f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
+            _tutorialTipText = NewText(rect, "Tip", "", 12, TextWhite, TextAnchor.UpperLeft);
+            SetRect(_tutorialTipText.rectTransform, new Vector2(24f, -308f), new Vector2(630f, 44f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
+            _tutorialPrev = NewButton(rect, "Prev", "НАЗАД", Color.white, 12, _sprBtnNeutral);
+            SetRect(_tutorialPrev.GetComponent<RectTransform>(), new Vector2(24f, 20f), new Vector2(90f, 32f), new Vector2(0f, 0f), new Vector2(0f, 0f));
+            _tutorialPrev.onClick.AddListener(delegate { SetTutorialStep(_tutorialStep - 1); });
+
+            _tutorialNext = NewButton(rect, "Next", "ДАЛЕЕ", Color.white, 12, _sprBtnAmber);
+            SetRect(_tutorialNext.GetComponent<RectTransform>(), new Vector2(-24f, 20f), new Vector2(110f, 32f), new Vector2(1f, 0f), new Vector2(1f, 0f));
             _tutorialNext.onClick.AddListener(OnTutorialNextClicked);
             _tutorialNextLabel = _tutorialNext.GetComponentInChildren<Text>();
 
@@ -605,207 +765,38 @@ namespace Game.Factory
             SetTutorialStep(0);
         }
 
-        void BuildHintCard(RectTransform root)
+        void BuildGameOver(RectTransform root)
         {
-            // Подсказка в левом нижнем углу. Она меняется в зависимости от того,
-            // что сейчас болит у игрока: энергия, деньги или план.
-            _hintCard = NewRect(root, "Hint Card").gameObject;
-            RectTransform rect = _hintCard.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0f, 0f);
-            rect.anchorMax = new Vector2(0f, 0f);
-            rect.pivot = new Vector2(0f, 0f);
-            rect.anchoredPosition = new Vector2(20f, 16f);
-            rect.sizeDelta = new Vector2(440f, 88f);
-            AddImage(rect, Panel);
+            _gameOver = NewRect(root, "GameOverModal").gameObject;
+            RectTransform rect = _gameOver.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(500f, 280f);
+            AddSlicedImage(rect, _sprSidebarBg);
 
-            RectTransform stripe = NewRect(rect, "Stripe");
-            stripe.anchorMin = new Vector2(0f, 0f);
-            stripe.anchorMax = new Vector2(0f, 1f);
-            stripe.pivot = new Vector2(0f, 0.5f);
-            stripe.anchoredPosition = Vector2.zero;
-            stripe.sizeDelta = new Vector2(4f, 0f);
-            AddImage(stripe, new Color(0.24f, 0.62f, 0.55f));
-
-            Text title = NewText(rect, "Title", "СОВЕТ ДИРЕКТОРУ", 14, new Color(0.24f, 0.62f, 0.55f), TextAnchor.UpperLeft);
-            SetRect(title.rectTransform, new Vector2(14f, -8f), new Vector2(240f, 20f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            Text title = NewText(rect, "Title", "ЗАВОД ОСТАНОВЛЕН", 20, AccentRed, TextAnchor.MiddleCenter);
+            SetRect(title.rectTransform, new Vector2(0f, -30f), new Vector2(460f, 30f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
             title.fontStyle = FontStyle.Bold;
 
-            _hintText = NewText(rect, "Text", "", 13, TextColor, TextAnchor.UpperLeft);
-            SetRect(_hintText.rectTransform, new Vector2(14f, -28f), new Vector2(412f, 36f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            _hintText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _gameOverText = NewText(rect, "Body", "", 13, TextWhite, TextAnchor.MiddleCenter);
+            SetRect(_gameOverText.rectTransform, new Vector2(0f, -100f), new Vector2(440f, 90f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
 
-            Button openTut = NewButton(rect, "OpenTut", "ОБУЧЕНИЕ", new Color(0.24f, 0.62f, 0.55f), 12);
-            RectTransform openTutRect = openTut.GetComponent<RectTransform>();
-            SetRect(openTutRect, new Vector2(14f, 8f), new Vector2(100f, 24f), new Vector2(0f, 0f), new Vector2(0f, 0f));
-            openTut.onClick.AddListener(ToggleTutorial);
+            Button restart = NewButton(rect, "RestartBtn", "НАЧАТЬ ЗАНОВО", Color.white, 13, _sprBtnAmber);
+            SetRect(restart.GetComponent<RectTransform>(), new Vector2(0f, 30f), new Vector2(180f, 38f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f));
+            restart.onClick.AddListener(delegate { _game.Restart(); });
 
-            Button hide = NewButton(rect, "Hide", "СКРЫТЬ", new Color(0.28f, 0.30f, 0.36f), 12);
-            RectTransform hideRect = hide.GetComponent<RectTransform>();
-            SetRect(hideRect, new Vector2(122f, 8f), new Vector2(80f, 24f), new Vector2(0f, 0f), new Vector2(0f, 0f));
-            hide.onClick.AddListener(delegate { _hintCard.SetActive(false); });
+            _gameOver.SetActive(false);
         }
 
-        Text CreateBulletTitle(RectTransform parent, string name, float top)
-        {
-            Text text = NewText(parent, name, "", 16, TextColor, TextAnchor.UpperLeft);
-            SetRect(text.rectTransform, new Vector2(18f, -top), new Vector2(220f, 24f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            text.fontStyle = FontStyle.Bold;
-            return text;
-        }
-
-        Text CreateBulletDesc(RectTransform parent, string name, float top)
-        {
-            Text text = NewText(parent, name, "", 15, TextColor, TextAnchor.UpperLeft);
-            SetRect(text.rectTransform, new Vector2(244f, -top), new Vector2(570f, 54f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate;
-            return text;
-        }
-
-        void SetTutorialStep(int step)
-        {
-            _tutorialStep = Mathf.Clamp(step, 0, 3);
-            _tutorialStepBadge.text = "ШАГ " + (_tutorialStep + 1) + " ИЗ 4";
-
-            for (int i = 0; i < _tutorialStepTabs.Length; i++)
-            {
-                bool active = i == _tutorialStep;
-                Image img = _tutorialStepTabs[i].GetComponent<Image>();
-                img.color = active ? new Color(0.24f, 0.62f, 0.55f) : Dim;
-                Text label = _tutorialStepTabs[i].GetComponentInChildren<Text>();
-                label.color = active ? new Color(0.07f, 0.08f, 0.10f) : TextColor;
-            }
-
-            _tutorialPrev.interactable = _tutorialStep > 0;
-            _tutorialNextLabel.text = _tutorialStep == 3 ? "ПОНЯТНО, В БОЙ!" : "ДАЛЕЕ »";
-
-            if (_tutorialStep == 0)
-            {
-                _tutorialStepTitle.text = "1. ПРОИЗВОДСТВЕННАЯ ЦЕПОЧКА (3 СТАНКА)";
-                _tutorialSubTitle.text = "Каждая рабочая линия состоит из трёх станков, работающих автоматически:";
-
-                _tutorialPoint1Title.text = "· ЗАКУПЩИК";
-                _tutorialPoint1Title.color = BuyerColor;
-                _tutorialPoint1Desc.text = "Закупает сырьё партиями по рыночной цене и отправляет на склад материалов (вместимость 10 шт).";
-
-                _tutorialPoint2Title.text = "· ПРОИЗВОДИТЕЛЬ";
-                _tutorialPoint2Title.color = ProducerColor;
-                _tutorialPoint2Desc.text = "Забирает сырьё со склада и перерабатывает его в готовую продукцию. Если сырья нет — ожидает поставку.";
-
-                _tutorialPoint3Title.text = "· ПРОДАВЕЦ";
-                _tutorialPoint3Title.color = SellerColor;
-                _tutorialPoint3Desc.text = "Отгружает готовую продукцию со склада и приносит вам деньги за каждый проданный товар.";
-
-                _tutorialTipText.text = "СОВЕТ: Следите за балансом скоростей станков, чтобы склад материалов или товаров не переполнялся.";
-            }
-            else if (_tutorialStep == 1)
-            {
-                _tutorialStepTitle.text = "2. ЭНЕРГОСЕТЬ И ГЕНЕРАТОРЫ";
-                _tutorialSubTitle.text = "Завод полностью зависит от стабильного электроснабжения:";
-
-                _tutorialPoint1Title.text = "· РАСХОД ЭНЕРГИИ";
-                _tutorialPoint1Title.color = GeneratorColor;
-                _tutorialPoint1Desc.text = "Каждая линия и каждый уровень улучшения машин потребляют энергию (см. «ЭНЕРГИЯ X / Y» вверху).";
-
-                _tutorialPoint2Title.text = "· ОБЕСТОЧИВАНИЕ";
-                _tutorialPoint2Title.color = new Color(1f, 0.45f, 0.42f);
-                _tutorialPoint2Desc.text = "Если расход превысит ёмкость генераторов — завод обесточится, и все станки остановятся!";
-
-                _tutorialPoint3Title.text = "· ГЕНЕРАТОРЫ";
-                _tutorialPoint3Title.color = GeneratorColor;
-                _tutorialPoint3Desc.text = "Улучшайте генераторы 1 и 2 внизу правой панели (+4 энергии за уровень). Учтите: растёт плата за топливо.";
-
-                _tutorialTipText.text = "СОВЕТ: Перед открытием новой линии или прокачкой машин убедитесь, что есть свободная энергия.";
-            }
-            else if (_tutorialStep == 2)
-            {
-                _tutorialStepTitle.text = "3. СМЕНЫ, ПЛАН И БАНКРОТСТВО";
-                _tutorialSubTitle.text = "Каждый день завод должен сделать нужные детали — смотрите строку плана под верхней панелью:";
-
-                _tutorialPoint1Title.text = "· СМЕНА 40 СЕКУНД";
-                _tutorialPoint1Title.color = new Color(0.85f, 0.90f, 1f);
-                _tutorialPoint1Desc.text = "День длится 40 секунд. В плане написано, сколько шестерёнок, корпусов, микросхем и сборок нужно успеть сделать.";
-
-                _tutorialPoint2Title.text = "· ПРЕМИЯ ЗА ПЛАН";
-                _tutorialPoint2Title.color = new Color(0.55f, 0.95f, 0.60f);
-                _tutorialPoint2Desc.text = "Сделали всё по плану — получаете премию деньгами. Завтра нормы вырастут, так что вкладывайтесь в станки.";
-
-                _tutorialPoint3Title.text = "· 3 СТРАЙКА = КОНЕЦ";
-                _tutorialPoint3Title.color = new Color(1f, 0.48f, 0.42f);
-                _tutorialPoint3Desc.text = "Провал плана или нехватка денег на топливо дают штраф (страйк ✕). 3 страйка — банкротство и конец игры.";
-
-                _tutorialTipText.text = "СОВЕТ: Не держите прибыль мёртвым грузом — инвестируйте деньги в прокачку станков и новые линии.";            }
-            else
-            {
-                _tutorialStepTitle.text = "4. РАСШИРЕНИЕ И СТАТИСТИКА";
-                _tutorialSubTitle.text = "Как масштабировать завод до максимальной прибыли:";
-
-                _tutorialPoint1Title.text = "· ВКЛАДКИ ЛИНИЙ";
-                _tutorialPoint1Title.color = LineColors[1];
-                _tutorialPoint1Desc.text = "Вверху правой панели переключайтесь между линиями: «ШЕСТ.» (Шестерёнки), «КОРПУС», «МИКРО» и «СБОРКА».";
-
-                _tutorialPoint2Title.text = "· ПРОКАЧКА СТАНКОВ";
-                _tutorialPoint2Title.color = SellerColor;
-                _tutorialPoint2Desc.text = "Продавец увеличивает цену продажи, а Закупщик и Производитель ускоряют свои циклы.";
-
-                _tutorialPoint3Title.text = "· ТАБЛИЦА БАЛАНСА";
-                _tutorialPoint3Title.color = new Color(0.28f, 0.45f, 0.72f);
-                _tutorialPoint3Desc.text = "Кнопка «ТАБЛИЦА» вверху открывает подробную финансовую статистику, остатки сырья и журнал событий.";
-
-                _tutorialTipText.text = "СОВЕТ: Сборка делает редукторы, приводы и турбины из готовых деталей — это самая дорогая продукция.";
-            }
-        }
-
-        void OnTutorialNextClicked()
-        {
-            if (_tutorialStep < 3) SetTutorialStep(_tutorialStep + 1);
-            else ToggleTutorial();
-        }
-
+        // ------------------------------------------------------------- Logic & Updates
         public void ToggleTutorial()
         {
-            if (_tutorial == null) return;
             bool open = !_tutorial.activeSelf;
             _tutorial.SetActive(open);
             if (open && _table != null && _table.activeSelf) ToggleTable();
             if (_tutorialButtonLabel != null) _tutorialButtonLabel.text = open ? "СКРЫТЬ" : "ОБУЧЕНИЕ";
-        }
-
-        void UpdateHint(FactorySim sim)
-        {
-            // Приоритет подсказок: сначала самое критичное.
-            // Пока не продали ни одной штуки — объясняем базу, потом энергия,
-            // потом деньги, потом план, потом новые линии/сборка.
-            if (_hintCard == null || !_hintCard.activeSelf || _hintText == null) return;
-
-            if (sim.Day == 1 && sim.TotalSold == 0)
-            {
-                _hintText.text = "Линия шестерёнок запущена! Станки работают сами: следите за ростом денег вверху.";
-            }
-            else if (sim.EnergyUsed >= sim.EnergyCapacity)
-            {
-                _hintText.text = "Энергия на пределе! Улучшите Генератор 1 или 2 внизу правой панели.";
-            }
-            else if (sim.Money >= 45f && sim.Lines[0].Buyer.Level == 1)
-            {
-                _hintText.text = "Есть деньги на улучшение! Нажмите «УЛУЧШИТЬ» у Закупщика или Производителя.";
-            }
-            else if (sim.PlanComplete)
-            {
-                _hintText.text = "План дня выполнен! В конце смены будет премия. Копите на линию «КОРПУСА».";
-            }
-            else if (sim.Day >= 2 && !sim.Lines[1].Built && sim.Money >= 180f && sim.EnergyCapacity - sim.EnergyUsed >= FactorySim.LineEnergy)
-            {
-                _hintText.text = "Хватает средств на вторую линию! Переключитесь на «КОРПУС» и постройте её.";
-            }
-            else if (!AnyAssemblyBuilt(sim) && sim.Money >= sim.Assembly[0].BuildCost)
-            {
-                _hintText.text = "Можно открыть сборку: редукторы из шестерёнок и корпусов стоят дороже.";
-            }
-            else
-            {
-                _hintText.text = "Нажмите «ОБУЧЕНИЕ» в любой момент, чтобы изучить подробные правила завода.";
-            }
         }
 
         public void ToggleTable()
@@ -823,39 +814,61 @@ namespace Game.Factory
 
         public void Tick()
         {
-            // Tick дергается каждый кадр. Тут только чтение Sim и запись текстов,
-            // ничего не создаём и не уничтожаем — иначе Unity быстро расстроится.
             FactorySim sim = _game.Sim;
             if (sim == null) return;
 
+            // Плавная анимация сворачивания сайдбара
+            if (Mathf.Abs(_sidebarCurrentX - _sidebarTargetX) > 0.1f)
+            {
+                _sidebarCurrentX = Mathf.Lerp(_sidebarCurrentX, _sidebarTargetX, Time.unscaledDeltaTime * 14f);
+                _sidebarPanel.anchoredPosition = new Vector2(_sidebarCurrentX, _sidebarPanel.anchoredPosition.y);
+            }
+
+            if (_sidebarToggleArrow != null)
+            {
+                float targetAngle = _sidebarCollapsed ? 180f : 0f;
+                float currentAngle = _sidebarToggleArrow.localEulerAngles.z;
+                float newAngle = Mathf.MoveTowardsAngle(currentAngle, targetAngle, Time.unscaledDeltaTime * 720f);
+                _sidebarToggleArrow.localEulerAngles = new Vector3(0f, 0f, newAngle);
+            }
+
+            // TopBar значения
             _money.text = "$ " + Mathf.FloorToInt(sim.Money);
-            _day.text = "ДЕНЬ " + sim.Day + (sim.Strikes > 0 ? " · ✕" + sim.Strikes : "");
-            _day.color = sim.Strikes > 0 ? new Color(1f, 0.55f, 0.48f) : TextColor;
+            _day.text = "ДЕНЬ " + sim.Day + (sim.Strikes > 0 ? " • ✕" + sim.Strikes : "");
+            _day.color = sim.Strikes > 0 ? AccentRed : TextWhite;
             _phase.text = sim.PhaseText;
 
             bool planMet = sim.PlanComplete;
             _plan.text = "ПЛАН " + sim.PlanDoneCount + "/" + sim.Plan.Count;
-            _plan.color = planMet
-                ? new Color(0.55f, 0.95f, 0.60f)
-                : (sim.ShiftActive ? new Color(0.85f, 0.90f, 1f) : new Color(0.95f, 0.78f, 0.42f));
+            _plan.color = planMet ? AccentGreen : (sim.ShiftActive ? AccentCyan : AccentAmber);
 
-            _planDetail.text = sim.PlanText();
-            _planDetail.color = planMet
-                ? new Color(0.55f, 0.95f, 0.60f)
-                : (sim.ShiftActive ? new Color(0.85f, 0.90f, 1f) : new Color(0.95f, 0.78f, 0.42f));
+            float totalDone = 0f;
+            float totalNeed = 0f;
+            for (int i = 0; i < sim.Plan.Count; i++)
+            {
+                var item = sim.Plan[i];
+                totalDone += Mathf.Min(sim.DoneFor(item.Part), item.Need);
+                totalNeed += item.Need;
+            }
+            float ratio = totalNeed > 0f ? Mathf.Clamp01(totalDone / totalNeed) : 0f;
+
+            if (_planProgressBar != null)
+            {
+                _planProgressBar.sizeDelta = new Vector2(70f * ratio, 0f);
+                _planProgressBar.gameObject.SetActive(ratio > 0.005f);
+            }
+
+            _planDetail.text = "ПЛАН ДНЯ: " + sim.PlanText();
+            _planDetail.color = planMet ? AccentGreen : new Color(0.56f, 0.81f, 1f);
 
             bool energyOk = sim.EnergyOk;
             _energy.text = "ЭНЕРГИЯ " + sim.EnergyUsed + " / " + sim.EnergyCapacity;
-            _energy.color = energyOk ? new Color(0.55f, 0.9f, 0.6f) : new Color(1f, 0.38f, 0.35f);
+            _energy.color = energyOk ? AccentGreen : AccentRed;
+            if (_energyDot != null) _energyDot.color = energyOk ? AccentGreen : AccentRed;
 
             _materials.text = "МАТ " + sim.TotalMaterials + "/" + (ProductInfo.MaterialCap * ProductInfo.Count) +
-                              " · ТОВ " + sim.TotalProducts + "/" + (ProductInfo.ProductCap * ProductInfo.Count);
+                              " • ТОВ " + sim.TotalProducts + "/" + (ProductInfo.ProductCap * ProductInfo.Count);
             _upkeep.text = "ТОПЛИВО $" + sim.TotalUpkeep + "/день";
-
-            _banner.text = sim.LastEvent;
-            if (sim.LastTone == EventTone.Bad) _banner.color = new Color(1f, 0.45f, 0.42f);
-            else if (sim.LastTone == EventTone.Good) _banner.color = new Color(0.55f, 0.95f, 0.60f);
-            else _banner.color = new Color(0.82f, 0.88f, 1f);
 
             if (sim.GameOver)
             {
@@ -868,8 +881,6 @@ namespace Game.Factory
 
             if (_gameOver.activeSelf != sim.GameOver) _gameOver.SetActive(sim.GameOver);
 
-            // _selected может указывать и на вкладку сборки (индекс 3).
-            // Табы: 0..2 линии, 3 сборки.
             if (_selected < 0 || _selected > sim.Lines.Count) _selected = 0;
 
             UpdateTabs(sim);
@@ -882,8 +893,6 @@ namespace Game.Factory
             UpdateHint(sim);
         }
 
-        // Карточки станков и сборок занимают одни и те же места в панели,
-        // поэтому просто прячем ненужный набор.
         void UpdateCardsVisible(FactorySim sim)
         {
             bool machines = _selected < sim.Lines.Count;
@@ -898,13 +907,21 @@ namespace Game.Factory
             for (int i = 0; i < _tabs.Length; i++)
             {
                 bool active = i == _selected;
-                bool built = i < sim.Lines.Count ? sim.Lines[i].Built : AnyAssemblyBuilt(sim);
-                Color tone = i < LineColors.Length ? LineColors[i] : new Color(0.95f, 0.58f, 0.72f);
-                Image image = _tabs[i].GetComponent<Image>();
-                image.color = active ? tone : (built ? new Color(0.18f, 0.20f, 0.25f) : new Color(0.14f, 0.15f, 0.18f));
+                Image tabImg = _tabs[i].GetComponent<Image>();
+                tabImg.sprite = active ? _sprTabActive : null;
+                tabImg.color = active ? Color.white : Color.clear;
 
                 Text label = _tabs[i].GetComponentInChildren<Text>();
-                label.color = active ? new Color(0.07f, 0.08f, 0.10f) : (built ? TextColor : new Color(0.48f, 0.52f, 0.58f));
+                if (active)
+                {
+                    label.color = (i == _tabs.Length - 1) ? AccentPink : TextWhite;
+                    label.fontStyle = FontStyle.Bold;
+                }
+                else
+                {
+                    label.color = (i == _tabs.Length - 1) ? new Color(0.85f, 0.50f, 0.65f) : TextMuted;
+                    label.fontStyle = FontStyle.Normal;
+                }
             }
         }
 
@@ -915,8 +932,6 @@ namespace Game.Factory
             return false;
         }
 
-        // Карточки выбранной линии. Одна и та же тройка карточек просто
-        // перезаполняется данными — так проще, чем плодить 9 карточек.
         void UpdateMachines(FactorySim sim)
         {
             LineState line = sim.Lines[_selected];
@@ -925,45 +940,46 @@ namespace Game.Factory
                 Card card = _cards[i];
                 MachineState machine = line.Machine((MachineKind)i);
                 card.Title.text = MachineCaption(i, line.Built);
-                card.Level.text = line.Built ? "Lv " + machine.Level : "—";
+                card.Level.text = line.Built ? "УР. " + machine.Level : "—";
                 card.Power.text = line.Built ? "Мощность: " + machine.EnergyDraw + " ед." : "";
 
                 if (!line.Built)
                 {
                     card.Stats.text = "Линия не построена";
-                    SetButton(card, false, "НЕДОСТУПНО");
+                    SetButton(card, false, "НЕДОСТУПНО", false);
                     continue;
                 }
 
                 if (machine.Kind == MachineKind.Buyer)
                 {
-                    card.Stats.text = "Партия " + machine.BuyBatch + " шт · $" + sim.MaterialPrice + "/шт\n" +
-                                      "Цикл " + machine.BuyInterval.ToString("0.00") + "с";
+                    card.Stats.text = "Партия: " + machine.BuyBatch + " шт • $" + sim.MaterialPrice + "/шт";
+                    card.Power.text = "Цикл: " + machine.BuyInterval.ToString("0.00") + "с";
                 }
                 else if (machine.Kind == MachineKind.Producer)
                 {
-                    card.Stats.text = "Нужно " + ProductInfo.Materials(line.Kind) + " мат. · " + machine.CraftTime.ToString("0.00") + "с\n" +
-                                      "На складе " + line.Products + "/" + ProductInfo.ProductCap;
+                    card.Stats.text = "Расход: " + ProductInfo.Materials(line.Kind) + " мат. • " + machine.CraftTime.ToString("0.00") + "с";
+                    card.Power.text = "Склад деталей: " + line.Products + "/" + ProductInfo.ProductCap + " шт.";
                 }
                 else
                 {
-                    card.Stats.text = "Цена $" + sim.SalePrice(line) + " · +$3/уровень\n" +
-                                      "Цикл " + machine.SellInterval.ToString("0.00") + "с";
+                    card.Stats.text = "Цена: $" + sim.SalePrice(line) + " (+$3/ур)";
+                    card.Power.text = "Цикл продажи: " + machine.SellInterval.ToString("0.00") + "с";
                 }
 
                 string reason;
-                SetButton(card, CanUpgradeMachine(sim, line, machine, out reason), reason);
+                bool can = CanUpgradeMachine(sim, line, machine, out reason);
+                SetButton(card, can, reason, false);
             }
         }
 
         static string MachineCaption(int kind, bool built)
         {
-            string suffix = built ? "" : " · НЕТ";
+            if (!built) return "ЗАКРЫТО";
             switch (kind)
             {
-                case 0: return "ЗАКУПЩИК" + suffix;
-                case 1: return "ПРОИЗВОДИТЕЛЬ" + suffix;
-                default: return "ПРОДАВЕЦ" + suffix;
+                case 0: return "ЗАКУПЩИК";
+                case 1: return "ПРОИЗВОДИТЕЛЬ";
+                default: return "ПРОДАВЕЦ";
             }
         }
 
@@ -972,18 +988,18 @@ namespace Game.Factory
             for (int i = 0; i < _generators.Length && i < sim.Generators.Count; i++)
             {
                 Card card = _generators[i];
-                GeneratorState generator = sim.Generators[i];
-
-                card.Level.text = "Lv " + generator.Level;
-                card.Stats.text = "Ёмкость: +" + generator.Capacity + " энергии\nТопливо: $" + generator.DailyUpkeep + "/день";
-                card.Power.text = "";
+                GeneratorState gen = sim.Generators[i];
+                card.Title.text = "ГЕНЕРАТОР " + (i + 1);
+                card.Level.text = "УР. " + gen.Level;
+                card.Stats.text = "Ёмкость: +" + gen.Capacity + " энергии • $" + gen.DailyUpkeep + "/д";
+                card.Power.text = "Статус: В норме (100%)";
 
                 string reason;
-                SetButton(card, CanUpgradeGenerator(sim, generator, out reason), reason);
+                bool can = CanUpgradeGenerator(sim, gen, out reason);
+                SetButton(card, can, reason, false);
             }
         }
 
-        // Карточки сборки. Логика один в один со станками, но рецепт у каждой свой.
         void UpdateAssemblyCards(FactorySim sim)
         {
             for (int i = 0; i < _assemblyCards.Length && i < sim.Assembly.Count; i++)
@@ -991,26 +1007,24 @@ namespace Game.Factory
                 AssemblyLine a = sim.Assembly[i];
                 Card card = _assemblyCards[i];
 
-                card.Level.text = a.Built ? "Lv " + a.Level : "—";
+                card.Title.text = "СБОРКА · " + a.Recipe.Name.ToUpper();
+                card.Level.text = a.Built ? "УР. " + a.Level : "НЕТ";
                 card.Power.text = a.Built ? "Мощность: " + a.EnergyDraw + " ед." : "";
 
                 if (!a.Built)
                 {
-                    card.Stats.text = RecipeLine(a.Recipe) + "\nЦена $" + sim.AssemblyPrice(i) +
-                                      " · " + a.CraftTime.ToString("0.0") + "с";
+                    card.Stats.text = RecipeLine(a.Recipe) + "\nЦена $" + sim.AssemblyPrice(i) + " • " + a.CraftTime.ToString("0.0") + "с";
                     string reason;
-                    SetButton(card, CanBuildAssembly(sim, i, out reason), reason);
+                    SetButton(card, CanBuildAssembly(sim, i, out reason), reason, true);
                     continue;
                 }
 
                 card.Stats.text = RecipeLine(a.Recipe) + "\n" +
-                                  "Склад " + a.Output + "/" + AssemblyLine.Cap + " · Сделано " + a.Produced +
-                                  " · $" + sim.AssemblyPrice(i);
-                // что уже лежит на верстаке под текущий заказ
+                                  "Склад " + a.Output + "/" + AssemblyLine.Cap + " • Сделано " + a.Produced + " • $" + sim.AssemblyPrice(i);
                 card.Power.text = "Детали: " + a.Hopper[0] + " + " + a.Hopper[1];
 
                 string why;
-                SetButton(card, CanUpgradeAssembly(sim, i, out why), why);
+                SetButton(card, CanUpgradeAssembly(sim, i, out why), why, true);
             }
         }
 
@@ -1041,13 +1055,14 @@ namespace Game.Factory
             return true;
         }
 
+        // БЕЗОПАСНЫЙ UpdateBuild: проверяет границы коллекции, исключая ArgumentOutOfRangeException
         void UpdateBuild(FactorySim sim)
         {
-            // Ищем, что вообще можно построить: сначала текущую вкладку,
-            // иначе первую свободную линию. _buildTarget запоминаем, потому что
-            // кнопка лежит ниже и на момент клика _selected уже может быть другим.
             int target = -1;
-            if (!sim.Lines[_selected].Built) target = _selected;
+            if (_selected < sim.Lines.Count && !sim.Lines[_selected].Built)
+            {
+                target = _selected;
+            }
             else
             {
                 for (int i = 0; i < sim.Lines.Count; i++)
@@ -1071,10 +1086,9 @@ namespace Game.Factory
             _buildTarget = target;
             _build.Button.gameObject.SetActive(true);
             _build.Title.text = "ЛИНИЯ «" + line.Name.ToUpper() + "»";
-            _build.Level.text = "";
-            _build.Stats.text = "Стоимость $" + line.BuildCost + " · энергия " + FactorySim.LineEnergy + "\n" +
-                                "Свободно энергии: " + (sim.EnergyCapacity - sim.EnergyUsed);
-            _build.Power.text = "";
+            _build.Level.text = "ЗАКРЫТО";
+            _build.Stats.text = "Стоимость: $" + line.BuildCost + " • Энергия: " + FactorySim.LineEnergy;
+            _build.Power.text = "Свободно энергии: " + (sim.EnergyCapacity - sim.EnergyUsed) + " ед.";
 
             string reason;
             bool ok = true;
@@ -1083,12 +1097,12 @@ namespace Game.Factory
             else reason = "ПОСТРОИТЬ $" + line.BuildCost;
 
             _build.Accent = LineColors[target];
-            SetButton(_build, ok, reason);
+            SetButton(_build, ok, reason, false);
         }
 
         bool CanUpgradeMachine(FactorySim sim, LineState line, MachineState machine, out string reason)
         {
-            if (machine.Level >= FactorySim.MaxLevel) { reason = "МАКС. УРОВЕНЬ"; return false; }
+            if (machine.Level >= FactorySim.MaxLevel) { reason = "МАКС. УР."; return false; }
             if (sim.Money + 0.001f < machine.UpgradeCost) { reason = "НУЖНО $" + machine.UpgradeCost; return false; }
 
             int newUsed = sim.EnergyUsed - machine.EnergyDraw + machine.NextEnergyDraw;
@@ -1100,125 +1114,114 @@ namespace Game.Factory
 
         bool CanUpgradeGenerator(FactorySim sim, GeneratorState generator, out string reason)
         {
-            if (generator.Level >= FactorySim.MaxLevel) { reason = "МАКС. УРОВЕНЬ"; return false; }
+            if (generator.Level >= FactorySim.MaxLevel) { reason = "МАКС. УР."; return false; }
             if (sim.Money + 0.001f < generator.UpgradeCost) { reason = "НУЖНО $" + generator.UpgradeCost; return false; }
 
             reason = "УЛУЧШИТЬ $" + generator.UpgradeCost;
             return true;
         }
 
-        // Общая функция для кнопок: выключенная кнопка серая и не нажимается.
-        // Цвета берём из акцента карточки, чтобы всё выглядело в одном стиле.
-        void SetButton(Card card, bool enabled, string label)
+        void SetButton(Card card, bool enabled, string label, bool isPink)
         {
             card.Button.interactable = enabled;
             card.ButtonLabel.text = label;
 
-            ColorBlock colors = card.Button.colors;
-            colors.normalColor = enabled ? card.Accent : new Color(0.28f, 0.30f, 0.35f);
-            colors.highlightedColor = enabled ? Color.Lerp(card.Accent, Color.white, 0.18f) : new Color(0.32f, 0.34f, 0.39f);
-            colors.pressedColor = enabled ? Color.Lerp(card.Accent, Color.black, 0.22f) : new Color(0.25f, 0.27f, 0.31f);
-            colors.disabledColor = new Color(0.24f, 0.26f, 0.30f);
-            card.Button.colors = colors;
-            card.ButtonLabel.color = enabled ? new Color(0.07f, 0.08f, 0.10f) : new Color(0.62f, 0.66f, 0.72f);
+            if (enabled)
+            {
+                card.ButtonImage.sprite = isPink ? _sprBtnPink : _sprBtnAmber;
+                card.ButtonLabel.color = isPink ? TextWhite : ColorSurface0;
+            }
+            else
+            {
+                card.ButtonImage.sprite = _sprBtnDisabled;
+                card.ButtonLabel.color = TextMuted;
+            }
         }
 
         void UpdateTable(FactorySim sim)
         {
-            // Таблица обновляется только когда открыта — незачем тратить кадры.
             if (!_table.activeSelf) return;
 
             var journal = new System.Text.StringBuilder();
-            int start = Mathf.Max(0, sim.Log.Count - 4);
+            int start = Mathf.Max(0, sim.Log.Count - 5);
             for (int i = start; i < sim.Log.Count; i++)
             {
-                journal.Append("· ").Append(sim.Log[i]);
+                journal.Append("• ").Append(sim.Log[i]);
                 if (i < sim.Log.Count - 1) journal.Append('\n');
             }
             _journal.text = journal.ToString();
 
-            // Отдельная таблица на 6 строк: 3 линии + 3 сборки.
-            // Шапка и строки позиционируются вручную, автоматического лэйаута тут нет.
-            for (int i = 0; i < _rows.Length && i < ProductInfo.Count && i < sim.Lines.Count; i++)
+            for (int i = 0; i < ProductInfo.Count; i++)
             {
                 LineState line = sim.Lines[i];
                 Row row = _rows[i];
-
-                row.Line.text = line.Built ? line.Name : line.Name + " · нет";
-                row.Line.color = line.Built ? LineColors[i] : new Color(0.52f, 0.56f, 0.63f);
-
-                row.Materials.text = line.Built ? line.Materials + " / " + ProductInfo.MaterialCap : "—";
-                row.Products.text = line.Built ? line.Products + " / " + ProductInfo.ProductCap : "—";
-                row.Levels.text = line.Built
-                    ? "З " + line.Buyer.Level + " · П " + line.Producer.Level + " · Пр " + line.Seller.Level
-                    : "—";
-                row.Price.text = "$" + sim.SalePrice(line);
+                row.Line.text = ProductInfo.ShortName(line.Kind);
+                row.Materials.text = line.Built ? line.Materials + "/" + ProductInfo.MaterialCap : "—";
+                row.Products.text = line.Built ? line.Products + "/" + ProductInfo.ProductCap : "—";
+                row.Levels.text = line.Built ? line.Buyer.Level + "/" + line.Producer.Level + "/" + line.Seller.Level : "—";
+                row.Price.text = line.Built ? "$" + sim.SalePrice(line) : "—";
 
                 if (!line.Built)
                 {
-                    row.Status.text = "НЕ ПОСТРОЕНА";
-                    row.Status.color = new Color(0.55f, 0.58f, 0.64f);
+                    row.Status.text = "Линия закрыта";
+                    row.Status.color = TextMuted;
                 }
                 else if (!sim.EnergyOk)
                 {
                     row.Status.text = "НЕТ ЭНЕРГИИ";
-                    row.Status.color = new Color(1f, 0.45f, 0.42f);
+                    row.Status.color = AccentRed;
                 }
                 else if (!sim.ShiftActive)
                 {
                     row.Status.text = sim.Skipped ? "ПРОПУСК" : "ПЕРЕРЫВ";
-                    row.Status.color = new Color(0.92f, 0.80f, 0.45f);
+                    row.Status.color = AccentAmber;
                 }
                 else
                 {
                     row.Status.text = RowState(line);
-                    row.Status.color = new Color(0.60f, 0.90f, 0.62f);
+                    row.Status.color = AccentGreen;
                 }
             }
 
-            // строки сборок идут сразу после линий
             for (int i = 0; i < sim.Assembly.Count; i++)
             {
                 AssemblyLine a = sim.Assembly[i];
                 Row row = _rows[ProductInfo.Count + i];
-
-                row.Line.text = a.Built ? a.Name + " · сборка" : a.Name + " · нет";
-                row.Line.color = a.Built ? new Color(0.95f, 0.58f, 0.72f) : new Color(0.52f, 0.56f, 0.63f);
-                row.Materials.text = a.Built ? a.Hopper[0] + " / " + a.Recipe.AN + " · " + a.Hopper[1] + " / " + a.Recipe.BN : "—";
-                row.Products.text = a.Built ? a.Output + " / " + AssemblyLine.Cap : "—";
-                row.Levels.text = a.Built ? "Сб " + a.Level + " · Сделано " + a.Produced : "—";
+                row.Line.text = a.Built ? a.Name + " • сборка" : a.Name + " • нет";
+                row.Line.color = a.Built ? AccentPink : TextMuted;
+                row.Materials.text = a.Built ? a.Hopper[0] + "/" + a.Recipe.AN + " • " + a.Hopper[1] + "/" + a.Recipe.BN : "—";
+                row.Products.text = a.Built ? a.Output + "/" + AssemblyLine.Cap : "—";
+                row.Levels.text = a.Built ? "Сб " + a.Level + " • " + a.Produced + " шт." : "—";
                 row.Price.text = "$" + sim.AssemblyPrice(i);
 
                 if (!a.Built)
                 {
                     row.Status.text = "НЕ ПОСТРОЕНА";
-                    row.Status.color = new Color(0.55f, 0.58f, 0.64f);
+                    row.Status.color = TextMuted;
                 }
                 else if (!sim.EnergyOk)
                 {
                     row.Status.text = "НЕТ ЭНЕРГИИ";
-                    row.Status.color = new Color(1f, 0.45f, 0.42f);
+                    row.Status.color = AccentRed;
                 }
                 else if (!sim.ShiftActive)
                 {
                     row.Status.text = sim.Skipped ? "ПРОПУСК" : "ПЕРЕРЫВ";
-                    row.Status.color = new Color(0.92f, 0.80f, 0.45f);
+                    row.Status.color = AccentAmber;
                 }
                 else
                 {
                     row.Status.text = a.Status;
-                    row.Status.color = new Color(0.60f, 0.90f, 0.62f);
+                    row.Status.color = AccentGreen;
                 }
             }
 
             _tableTotals.text =
-                "Куплено " + sim.TotalBought + " мат. · Произведено " + sim.TotalProduced + " шт. · Продано " + sim.TotalSold + " шт.\n" +
-                "Выручка $" + Mathf.FloorToInt(sim.TotalRevenue) + " · Расходы $" + Mathf.FloorToInt(sim.TotalSpent) +
-                " · Субсидии $" + Mathf.FloorToInt(sim.TotalSubsidy) + " · Энергия " + sim.EnergyUsed + "/" + sim.EnergyCapacity + "\n" +
-                "Деталей: " + sim.Lines[0].Produced + " шест. · " + sim.Lines[1].Produced + " корп. · " +
-                sim.Lines[2].Produced + " микр.\n" +
-                "Собрано: " + sim.Assembly[0].Produced + " ред. · " + sim.Assembly[1].Produced + " прив. · " +
-                sim.Assembly[2].Produced + " турб.";
+                "Куплено " + sim.TotalBought + " мат. • Произведено " + sim.TotalProduced + " шт. • Продано " + sim.TotalSold + " шт.\n" +
+                "Выручка $" + Mathf.FloorToInt(sim.TotalRevenue) + " • Расходы $" + Mathf.FloorToInt(sim.TotalSpent) +
+                " • Субсидии $" + Mathf.FloorToInt(sim.TotalSubsidy) + " • Энергия " + sim.EnergyUsed + "/" + sim.EnergyCapacity + "\n" +
+                "Деталей: " + sim.Lines[0].Produced + " шест. • " + sim.Lines[1].Produced + " корп. • " + sim.Lines[2].Produced + " микр.\n" +
+                "Собрано: " + sim.Assembly[0].Produced + " ред. • " + sim.Assembly[1].Produced + " прив. • " + sim.Assembly[2].Produced + " турб.";
         }
 
         static string RowState(LineState line)
@@ -1228,65 +1231,174 @@ namespace Game.Factory
             return "РАБОТА";
         }
 
-        // Вспомогательные штуки для ручной вёрстки.
-        // NewRect/AddImage/NewText — это просто сахар, чтобы Build не превращался в 500 строк.
+        void UpdateHint(FactorySim sim)
+        {
+            if (!_adviceVisible || _hintCard == null || !_hintCard.activeSelf) return;
+
+            if (_selected == 3)
+            {
+                _hintTitle.text = "СОВЕТ ДИРЕКТОРУ: СБОРКА";
+                _hintText.text = "Посты сборки берут детали со складов и создают ценные узлы (Редукторы, Приводы, Турбины).";
+                return;
+            }
+
+            _hintTitle.text = "СОВЕТ ДИРЕКТОРУ";
+            LineState line = sim.Lines[_selected];
+            if (!line.Built)
+            {
+                _hintText.text = "Откройте линию «" + line.Name + "» для роста оборота. Нужна энергия генератора.";
+            }
+            else if (line.Materials == 0 && line.Buyer.Level <= line.Producer.Level)
+            {
+                _hintText.text = "Не хватает сырья для станков. Улучшите «Закупщика».";
+            }
+            else if (line.Products >= ProductInfo.ProductCap)
+            {
+                _hintText.text = "Склад деталей переполнен! Улучшите «Продавца» для сбыта.";
+            }
+            else if (sim.EnergyCapacity - sim.EnergyUsed < 2)
+            {
+                _hintText.text = "Энергия на исходе. Улучшите генератор, иначе станки остановятся.";
+            }
+            else
+            {
+                _hintText.text = "Смотрите на «ПЛАН ДНЯ» вверху: выполняйте позиции плана, чтобы получать крупные субсидии.";
+            }
+        }
+
+        void SetTutorialStep(int step)
+        {
+            _tutorialStep = Mathf.Clamp(step, 0, 3);
+            _tutorialStepBadge.text = "ШАГ " + (_tutorialStep + 1) + " ИЗ 4";
+            _tutorialPrev.gameObject.SetActive(_tutorialStep > 0);
+            _tutorialNextLabel.text = _tutorialStep == 3 ? "ПОНЯТНО" : "ДАЛЕЕ";
+
+            switch (_tutorialStep)
+            {
+                case 0:
+                    _tutorialStepTitle.text = "ОСНОВЫ: КОНВЕЙЕР И СТАНКИ";
+                    _tutorialSubTitle.text = "Как работает производственная цепочка каждого товара";
+                    _tutorialPoint1Title.text = "1. Закупщик";
+                    _tutorialPoint1Desc.text = "Периодически привозит партию сырья на склад. Чем выше уровень, тем больше партия.";
+                    _tutorialPoint2Title.text = "2. Производитель";
+                    _tutorialPoint2Desc.text = "Берёт сырьё со склада и изготавливает готовую деталь. Тратит фиксированное время.";
+                    _tutorialPoint3Title.text = "3. Продавец";
+                    _tutorialPoint3Desc.text = "Отгружает готовую продукцию заказчикам. Каждый уровень повышает цену продажи на +$3.";
+                    _tutorialTipText.text = "Совет: держите баланс между станками, чтобы склады не забивались и не простаивали.";
+                    break;
+                case 1:
+                    _tutorialStepTitle.text = "ЭНЕРГИЯ И ТОПЛИВО";
+                    _tutorialSubTitle.text = "Главные ограничения масштабирования фабрики";
+                    _tutorialPoint1Title.text = "1. Потребление энергии";
+                    _tutorialPoint1Desc.text = "Каждый уровень станка и каждая новая линия требуют электричества. Без него стройка невозможна.";
+                    _tutorialPoint2Title.text = "2. Генераторы";
+                    _tutorialPoint2Desc.text = "Вырабатывают энергоёмкость. Каждый уровень генератора добавляет +8 к лимиту мощности.";
+                    _tutorialPoint3Title.text = "3. Топливо и содержание";
+                    _tutorialPoint3Desc.text = "В конце каждого дня с баланса списывается плата за обслуживание работающих генераторов.";
+                    _tutorialTipText.text = "Совет: не покупайте генераторы раньше времени, чтобы не разориться на топливе.";
+                    break;
+                case 2:
+                    _tutorialStepTitle.text = "СБОРКА СЛОЖНЫХ УЗЛОВ";
+                    _tutorialSubTitle.text = "Вкладка «Сборка»: высокомаржинальная продукция";
+                    _tutorialPoint1Title.text = "1. Редукторы";
+                    _tutorialPoint1Desc.text = "Собираются из 2 Шестерёнок и 1 Корпуса. Стоимость продажи значительно выше деталей.";
+                    _tutorialPoint2Title.text = "2. Приводы";
+                    _tutorialPoint2Desc.text = "Сложный узел: требует 1 Редуктор и 2 Микросхемы. Открывает путь к Турбинам.";
+                    _tutorialPoint3Title.text = "3. Турбины";
+                    _tutorialPoint3Desc.text = "Вершина инженерной мысли: собираются из 2 Приводов и 2 Корпусов. Рекордная цена.";
+                    _tutorialTipText.text = "Совет: наладив сборку узлов, вы сможете легко закрывать требования плана дня.";
+                    break;
+                default:
+                    _tutorialStepTitle.text = "ПЛАН ДНЯ И СУБСИДИИ";
+                    _tutorialSubTitle.text = "Правила смены и выживания директора завода";
+                    _tutorialPoint1Title.text = "1. Смена и таймер";
+                    _tutorialPoint1Desc.text = "Длительность рабочего дня составляет 40 секунд. За это время нужно успеть отгрузить план.";
+                    _tutorialPoint2Title.text = "2. Награда за план";
+                    _tutorialPoint2Desc.text = "Выполнение всех позиций плана приносит крупную субсидию в бюджет фабрики.";
+                    _tutorialPoint3Title.text = "3. Страйки и банкротство";
+                    _tutorialPoint3Desc.text = "Провал плана даёт страйк (✕). Три страйка приводят к немедленному увольнению директора.";
+                    _tutorialTipText.text = "Совет: если смена подходит к концу, сфокусируйтесь на улучшении отстающего станка!";
+                    break;
+            }
+        }
+
+        void OnTutorialNextClicked()
+        {
+            if (_tutorialStep < 3) SetTutorialStep(_tutorialStep + 1);
+            else ToggleTutorial();
+        }
+
+        // ------------------------------------------------------------- Helpers
         static RectTransform NewRect(Transform parent, string name)
         {
             var go = new GameObject(name, typeof(RectTransform));
-            var rect = go.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            return rect;
+            go.transform.SetParent(parent, false);
+            return go.GetComponent<RectTransform>();
         }
 
-        static Image AddImage(RectTransform rect, Color color)
+        static void AddSlicedImage(RectTransform rect, Sprite sprite)
         {
-            var image = rect.gameObject.AddComponent<Image>();
-            image.color = color;
-            return image;
+            Image img = rect.gameObject.AddComponent<Image>();
+            img.sprite = sprite;
+            img.type = Image.Type.Sliced;
+            img.color = Color.white;
+            img.raycastTarget = false;
         }
 
         static Text NewText(Transform parent, string name, string value, int size, Color color, TextAnchor anchor)
         {
-            RectTransform rect = NewRect(parent, name);
-            var text = rect.gameObject.AddComponent<Text>();
+            GameObject go = new GameObject(name, typeof(RectTransform), typeof(Text));
+            go.transform.SetParent(parent, false);
+            Text text = go.GetComponent<Text>();
+            text.font = _font;
             text.text = value;
-            if (_font != null) text.font = _font;
             text.fontSize = size;
             text.color = color;
             text.alignment = anchor;
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
             text.raycastTarget = false;
             return text;
         }
 
-        static Button NewButton(Transform parent, string name, string label, Color color, int fontSize)
+        static Button NewButton(Transform parent, string name, string label, Color textColor, int fontSize, Sprite background)
         {
             RectTransform rect = NewRect(parent, name);
-            var image = rect.gameObject.AddComponent<Image>();
-            image.color = color;
+            Image image = rect.gameObject.AddComponent<Image>();
+            if (background != null)
+            {
+                image.sprite = background;
+                image.type = Image.Type.Sliced;
+            }
+            image.color = Color.white;
+            image.raycastTarget = true;
 
-            var button = rect.gameObject.AddComponent<Button>();
-            button.targetGraphic = image;
+            Button button = rect.gameObject.AddComponent<Button>();
 
-            Text text = NewText(rect, "Label", label, fontSize, new Color(0.07f, 0.08f, 0.10f), TextAnchor.MiddleCenter);
-            RectTransform textRect = text.rectTransform;
+            // Текст строго по центру кнопки
+            GameObject textGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            textGo.transform.SetParent(rect, false);
+            RectTransform textRect = textGo.GetComponent<RectTransform>();
             textRect.anchorMin = Vector2.zero;
             textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = new Vector2(4f, 2f);
-            textRect.offsetMax = new Vector2(-4f, -2f);
-            text.fontStyle = FontStyle.Bold;
+            textRect.pivot = new Vector2(0.5f, 0.5f);
+            textRect.sizeDelta = Vector2.zero;
+            textRect.anchoredPosition = Vector2.zero;
+
+            Text text = textGo.GetComponent<Text>();
+            text.font = _font;
+            text.text = label;
+            text.fontSize = fontSize;
+            text.color = textColor;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.raycastTarget = false;
+
             return button;
         }
 
-        // SetRect ставит якоря и размеры сразу. Порядок аргументов:
-        // позиция, размер, anchorMin, anchorMax. Pivot всегда = anchorMin,
-        // иначе элементы уезжают (проверено на практике).
         static void SetRect(RectTransform rect, Vector2 position, Vector2 size, Vector2 anchorMin, Vector2 anchorMax)
         {
             rect.anchorMin = anchorMin;
             rect.anchorMax = anchorMax;
-            rect.pivot = anchorMin;
+            rect.pivot = anchorMin == anchorMax ? anchorMin : new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = position;
             rect.sizeDelta = size;
         }
