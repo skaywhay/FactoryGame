@@ -3,11 +3,14 @@ using System.Collections.Generic;
 
 namespace Game.Factory
 {
+    // Здесь вся математика игры: деньги, дни, линии, станки, сборка и план.
+    // Файл уже большой, его честно можно разбить на три, но пока так удобнее:
+    // открыл один файл — и видишь весь баланс разом. Если что, я предупреждал.
     public enum MachineKind
     {
-        Buyer,
-        Producer,
-        Seller
+        Buyer,      // закупает сырьё
+        Producer,   // делает товар
+        Seller      // продаёт товар
     }
 
     public enum UpgradeStatus
@@ -22,22 +25,29 @@ namespace Game.Factory
 
     public enum EventTone
     {
-        Info,
-        Good,
-        Bad
+        Info,   // обычная новость дня
+        Good,   // план выполнен, что-то построено
+        Bad     // провал, штраф, нет денег
     }
 
     public enum ProductKind
     {
-        Gear,
-        Case,
-        Chip
+        Gear,   // 0
+        Case,   // 1
+        Chip    // 2
     }
 
+    // Справочник по товарам. Индекс ProductKind совпадает с индексом линии,
+    // поэтому здесь всё в виде switch — быстро и без словарей.
     public static class ProductInfo
     {
         public const int Count = 3;
+
+        // Цена сырья. Растёт каждый третий день (см. FactorySim.MaterialPrice).
         public const int MaterialCost = 4;
+
+        // Склады маленькие специально: иначе можно было бы закупиться на год вперёд
+        // и вообще не следить за балансом.
         public const int MaterialCap = 10;
         public const int ProductCap = 10;
 
@@ -53,6 +63,7 @@ namespace Game.Factory
 
         public static string ShortName(ProductKind kind)
         {
+            // Короткие подписи для вкладок и таблицы. Длинные там не влезают.
             switch (kind)
             {
                 case ProductKind.Gear: return "ШЕСТ.";
@@ -61,6 +72,8 @@ namespace Game.Factory
             }
         }
 
+        // Сколько сырья съедает одна штука. Корпус дороже шестерёнки,
+        // микросхема — самая дорогая, поэтому и линия открывается позже.
         public static int Materials(ProductKind kind)
         {
             switch (kind)
@@ -71,6 +84,8 @@ namespace Game.Factory
             }
         }
 
+        // Цены продажи. Продавец потом добавляет +3 за уровень,
+        // а инфляция умножает всё это на PriceScale.
         public static int BasePrice(ProductKind kind)
         {
             switch (kind)
@@ -81,6 +96,8 @@ namespace Game.Factory
             }
         }
 
+        // Время производства одной штуки на первом уровне.
+        // Микросхема делается почти в три раза дольше шестерёнки — это и есть её цена.
         public static float CraftTime(ProductKind kind)
         {
             switch (kind)
@@ -91,6 +108,7 @@ namespace Game.Factory
             }
         }
 
+        // Первая линия бесплатная, остальные покупаются. Иначе старт был бы слишком сложным.
         public static int BuildCost(ProductKind kind)
         {
             switch (kind)
@@ -102,28 +120,56 @@ namespace Game.Factory
         }
     }
 
+    // Один пункт дневного плана: «сделай N таких-то деталей за смену».
+    // Part — тот же id, что и у входов рецепта: 0..2 это склады линий, 10+ это сборки.
+    public class PlanItem
+    {
+        public readonly int Part;
+        public readonly int Need;
+
+        public PlanItem(int part, int need)
+        {
+            Part = part;
+            Need = need;
+        }
+
+        public string Name { get { return Recipes.PartName(Part); } }
+    }
+
     public class FactorySim
     {
-        public const int MaxLevel = 8;
+        public const int MaxLevel = 15;
         public const int LineEnergy = 6;
         public const int MaxStrikes = 3;
 
         public float Money = 300f;
         public int Day;
 
-        public float ShiftLength = 40f;
+        public float ShiftLength = 40f; // 40 секунд — нормально для прототипа, 60 было нудно
         public float ShiftElapsed;
         public bool ShiftActive;
         public bool Skipped;
         public float NextDayTimer;
         public int PendingUpkeep;
 
+        // Три провала плана — и всё, завод закрывается. Меньше двух было слишком строго,
+        // больше четырёх — никто уже не боится.
         public int Strikes;
         public bool GameOver;
         public bool PlanDone;
-        public int PlanTarget;
         public int Premium;
 
+        // План на текущий день. Раньше тут лежала одна цифра «заработай $X»,
+        // но это скучно: можно было продать всё подряд. Теперь нужны конкретные детали.
+        public readonly List<PlanItem> Plan = new List<PlanItem>();
+
+        // Счётчики «сделано за смену» — отдельно от общего Produced,
+        // потому что план сбрасывается каждый день.
+        public readonly int[] ShiftMade = new int[ProductInfo.Count];
+        public readonly int[] ShiftMadeAssembly = new int[Recipes.All.Length];
+
+        // Общая статистика за всю игру — её показывает таблица.
+        // ShiftSold/ShiftRevenue — только за текущую смену.
         public int TotalBought;
         public int TotalProduced;
         public int TotalSold;
@@ -135,6 +181,8 @@ namespace Game.Factory
         public int ShiftSold;
         public float ShiftRevenue;
 
+        // Последнее событие для баннера сверху и журнал для таблицы.
+        // Журнал не чистим, но в таблице показываем только хвост.
         public string LastEvent = "";
         public EventTone LastTone = EventTone.Info;
         public readonly List<string> Log = new List<string>();
@@ -142,13 +190,22 @@ namespace Game.Factory
         public readonly List<LineState> Lines = new List<LineState>();
         public readonly List<GeneratorState> Generators = new List<GeneratorState>();
 
+        // Сборка лежит отдельным списком, чтобы не трогать старые линии.
+        // Индекс совпадает с Recipes.All — на этом завязано вообще всё в UI.
+        public readonly List<AssemblyLine> Assembly = new List<AssemblyLine>();
+
         public FactorySim()
         {
+            // На старте работает только линия шестерёнок. Корпуса и микросхемы
+            // игрок открывает сам, когда накопит денег и энергии.
             Lines.Add(new LineState(ProductKind.Gear, true));
             Lines.Add(new LineState(ProductKind.Case, false));
             Lines.Add(new LineState(ProductKind.Chip, false));
             Generators.Add(new GeneratorState());
             Generators.Add(new GeneratorState());
+
+            for (int i = 0; i < Recipes.All.Length; i++) Assembly.Add(new AssemblyLine(Recipes.All[i]));
+
             BeginDay();
         }
 
@@ -156,8 +213,11 @@ namespace Game.Factory
         {
             get
             {
+                // Считаем каждый раз заново. Списки маленькие, оптимизировать нечего,
+                // зато невозможно забыть обновить поле после постройки.
                 int used = 0;
                 for (int i = 0; i < Lines.Count; i++) used += Lines[i].EnergyDraw;
+                for (int i = 0; i < Assembly.Count; i++) if (Assembly[i].Built) used += Assembly[i].EnergyDraw;
                 return used;
             }
         }
@@ -174,8 +234,11 @@ namespace Game.Factory
 
         public bool EnergyOk { get { return EnergyUsed <= EnergyCapacity; } }
 
+        // Инфляция: каждый день всё дороже на 7%. Без неё к десятому дню
+        // денег становится столько, что играть уже неинтересно.
         public float PriceScale { get { return 1f + 0.07f * (Day - 1); } }
 
+        // Сырьё дорожает медленнее — раз в три дня на $1.
         public int MaterialPrice { get { return ProductInfo.MaterialCost + (Day - 1) / 3; } }
 
         public int SalePrice(LineState line)
@@ -183,10 +246,99 @@ namespace Game.Factory
             return (int)System.Math.Round(line.Seller.BaseSalePrice(line.Kind) * PriceScale);
         }
 
-        public static int PlanFor(int day)
+        public int AssemblyPrice(int index)
         {
-            double value = 200.0 * System.Math.Pow(1.22, day - 1);
-            return (int)(System.Math.Round(value / 10.0) * 10.0);
+            return (int)System.Math.Round(Assembly[index].Price * PriceScale);
+        }
+
+        // Дневные нормы. Колонки: шестерёнки, корпуса, микросхемы, редукторы, приводы, турбины.
+        // Числа подбирал так, чтобы первые дни спокойно закрывались одной-двумя линиями,
+        // а к 12-му дню пришлось реально прокачивать станки и строить сборку.
+        // Дальше 12-го дня таблица не кончается — план просто растёт на 8% в день.
+        static readonly int[,] PlanTable =
+        {
+            { 15,  0,  0, 0, 0, 0 }, // 1 — только шестерёнки, знакомство
+            { 20,  0,  0, 0, 0, 0 }, // 2
+            { 24,  5,  0, 0, 0, 0 }, // 3 — самое время открыть корпуса
+            { 28,  9,  0, 0, 0, 0 }, // 4
+            { 32, 12,  0, 0, 0, 0 }, // 5
+            { 34, 15,  3, 0, 0, 0 }, // 6 — подключаются микросхемы
+            { 36, 18,  6, 0, 0, 0 }, // 7
+            { 39, 20,  9, 1, 0, 0 }, // 8 — первый редуктор
+            { 41, 21, 11, 2, 0, 0 }, // 9
+            { 42, 23, 13, 4, 1, 0 }, // 10 — первый привод
+            { 43, 25, 14, 5, 2, 0 }, // 11
+            { 44, 26, 15, 6, 4, 1 }, // 12 — турбина, дальше масштабируем
+        };
+
+        // Премия растёт линейно, чтобы к поздним дням она всё ещё была заметной
+        // на фоне выручки. Формулу можно крутить, она ни к чему не привязана.
+        public static int PlanPremium(int day)
+        {
+            return 80 + 35 * (day - 1);
+        }
+
+        public void BuildPlan(int day)
+        {
+            Plan.Clear();
+
+            int rows = PlanTable.GetLength(0);
+            int row = Math.Min(day, rows) - 1;
+            int extra = day - rows;
+
+            for (int i = 0; i < 6; i++)
+            {
+                int need = PlanTable[row, i];
+                if (need <= 0) continue;
+
+                // после конца таблицы каждый пункт потихоньку растёт
+                if (extra > 0) need += (int)Math.Ceiling(need * 0.08 * extra);
+
+                int part = i < 3 ? i : 10 + (i - 3);
+                Plan.Add(new PlanItem(part, need));
+            }
+        }
+
+        // сколько единиц пункта плана сделано за эту смену
+        public int DoneFor(int part)
+        {
+            if (part < 10) return ShiftMade[part];
+            return ShiftMadeAssembly[part - 10];
+        }
+
+        public bool PlanComplete
+        {
+            get
+            {
+                if (Plan.Count == 0) return false;
+                for (int i = 0; i < Plan.Count; i++)
+                    if (DoneFor(Plan[i].Part) < Plan[i].Need) return false;
+                return true;
+            }
+        }
+
+        // сколько типов деталей из плана уже закрыто — для короткой надписи вверху
+        public int PlanDoneCount
+        {
+            get
+            {
+                int done = 0;
+                for (int i = 0; i < Plan.Count; i++)
+                    if (DoneFor(Plan[i].Part) >= Plan[i].Need) done++;
+                return done;
+            }
+        }
+
+        public string PlanText()
+        {
+            string text = "";
+            for (int i = 0; i < Plan.Count; i++)
+            {
+                PlanItem item = Plan[i];
+                if (text.Length > 0) text += " · ";
+                text += item.Name + " " + DoneFor(item.Part) + "/" + item.Need;
+            }
+            return text;
         }
 
         public int TotalUpkeep
@@ -244,6 +396,9 @@ namespace Game.Factory
             }
         }
 
+        // Начало дня. Сначала строим план и сбрасываем счётчики,
+        // потом списываем топливо. Если денег на топливо нет — субсидия и страйк,
+        // но день всё равно считается пропущенным, работать нельзя.
         public void BeginDay()
         {
             Day++;
@@ -252,9 +407,17 @@ namespace Game.Factory
             PlanDone = false;
             ShiftSold = 0;
             ShiftRevenue = 0f;
-            PlanTarget = PlanFor(Day);
-            Premium = 40 + 20 * (Day - 1);
+            BuildPlan(Day);
+            Premium = PlanPremium(Day);
             PendingUpkeep = TotalUpkeep;
+
+            // 
+
+            for (int i = 0; i < ShiftMade.Length; i++) ShiftMade[i] = 0;
+            for (int i = 0; i < ShiftMadeAssembly.Length; i++) ShiftMadeAssembly[i] = 0;
+
+            // Если кто-то был в процессе — не сбрасываем таймер, пусть доделает.
+            // А вот продажу и простаивающие станки стартуем с чистого листа.
 
             for (int i = 0; i < Lines.Count; i++)
             {
@@ -264,6 +427,12 @@ namespace Game.Factory
                 ResetTimer(line.Buyer);
                 ResetTimer(line.Producer);
                 ResetTimer(line.Seller);
+            }
+
+            for (int i = 0; i < Assembly.Count; i++)
+            {
+                if (!Assembly[i].Busy) Assembly[i].Timer = 0f;
+                Assembly[i].SellTimer = 0f;
             }
 
             if (Money + 0.001f < PendingUpkeep)
@@ -284,7 +453,7 @@ namespace Game.Factory
             TotalSpent += PendingUpkeep;
             ShiftActive = true;
             NextDayTimer = 0f;
-            SetEvent("День " + Day + ": план $" + PlanTarget + " · топливо −$" + PendingUpkeep, EventTone.Info);
+            SetEvent("День " + Day + ": план " + PlanText() + " · топливо −$" + PendingUpkeep, EventTone.Info);
         }
 
         void Strike()
@@ -298,29 +467,34 @@ namespace Game.Factory
             if (!machine.Busy) machine.Timer = 0f;
         }
 
+        // Конец смены: смотрим, закрыт ли план по деталям.
+        // Если да — платим премию, если нет — страйк (на третьем игра заканчивается).
         public void EndDay()
         {
             ShiftActive = false;
             ShiftElapsed = ShiftLength;
             NextDayTimer = 2.5f;
 
-            if (ShiftRevenue + 0.5f >= PlanTarget)
+            if (PlanComplete)
             {
                 PlanDone = true;
                 Money += Premium;
                 TotalRevenue += Premium;
                 TotalBonus += Premium;
-                SetEvent("День " + Day + " закрыт: план $" + PlanTarget + " выполнен · премия +$" + Premium +
-                         " · завтра план $" + PlanFor(Day + 1), EventTone.Good);
+                SetEvent("День " + Day + " закрыт: план выполнен (" + PlanText() + ") · премия +$" + Premium, EventTone.Good);
             }
             else
             {
                 Strike();
-                SetEvent("День " + Day + " закрыт: план провален ($" + ShiftRevenue.ToString("0") + " из $" + PlanTarget +
-                         ") · провал " + Strikes + "/" + MaxStrikes, EventTone.Bad);
+                SetEvent("День " + Day + " закрыт: план провален (" + PlanText() + ") · провал " + Strikes + "/" + MaxStrikes, EventTone.Bad);
             }
         }
 
+        // Главный тик. Порядок важен:
+        //   1) сборка (ей нужны детали, сделанные в прошлый тик),
+        //   2) линии (закупка -> производство -> продажа),
+        //   3) конец смены / следующий день.
+        // Если переставить местами — появятся странные скачки складов.
         public void Tick(float dt)
         {
             if (dt <= 0f || GameOver) return;
@@ -343,6 +517,23 @@ namespace Game.Factory
             }
 
             bool energyOk = EnergyOk;
+
+            // Сначала сборка, потом обычные линии — сборке нужны детали,
+            // которые производитель успел сделать в прошлый тик.
+            // (Если поменять порядок, детали будут уходить продавцу раньше цеха.)
+            for (int i = 0; i < Assembly.Count; i++)
+            {
+                AssemblyLine shop = Assembly[i];
+                if (!shop.Built) continue;
+
+                if (energyOk) TickAssembly(shop, i, dt);
+                else
+                {
+                    shop.Busy = false;
+                    shop.Status = "НЕТ ЭНЕРГИИ";
+                }
+            }
+
             for (int i = 0; i < Lines.Count; i++)
             {
                 LineState line = Lines[i];
@@ -370,6 +561,8 @@ namespace Game.Factory
             }
         }
 
+        // Закупщик берёт партию по 2 штуки, чтобы не тратить деньги каждый кадр.
+        // Если склад полон или денег нет — просто ждёт и пробует снова через 0.3с.
         void TickBuyer(LineState line, MachineState machine, float dt)
         {
             machine.Timer -= dt;
@@ -400,6 +593,9 @@ namespace Game.Factory
             }
         }
 
+        // Производитель. Пока Busy — просто тикает таймер.
+        // После готовности стоит 0.12с: без этой паузы за один кадр
+        // могло выйти несколько деталей подряд, и склады прыгали.
         void TickProducer(LineState line, MachineState machine, float dt)
         {
             if (machine.Busy)
@@ -409,7 +605,9 @@ namespace Game.Factory
                 if (machine.Timer > 0f) return;
 
                 line.Products++;
+                line.Produced++;
                 TotalProduced++;
+                ShiftMade[(int)line.Kind]++;
                 machine.Busy = false;
                 machine.Timer = 0.12f;
                 machine.Status = "ГОТОВО";
@@ -440,6 +638,8 @@ namespace Game.Factory
             machine.Status = "РАБОТА";
         }
 
+        // Продавец. Тут же начисляется выручка смены — по ней раньше считался план,
+        // теперь план по деталям, но деньги всё равно нужны.
         void TickSeller(LineState line, MachineState machine, float dt)
         {
             machine.Timer -= dt;
@@ -463,6 +663,111 @@ namespace Game.Factory
             machine.Timer = machine.SellInterval;
         }
 
+        // Самая хитрая часть. Сначала детали по одной перетаскиваются в Hopper,
+        // потом продаётся готовое (если его не ждёт следующая сборка),
+        // и только потом пост пытается начать новый цикл.
+        void TickAssembly(AssemblyLine shop, int index, float dt)
+        {
+            Recipe r = shop.Recipe;
+
+            // Потихоньку тащим детали на верстак. Отдельного общего склада нет:
+            // берём прямо из готовой продукции линий (или другой сборки).
+            // Один слот за тик — специально, иначе за кадр можно утащить всё и продавец останется с носом.
+            if (shop.Hopper[0] < r.AN + 1 && PartStock(r.A) > 0)
+            {
+                TakePart(r.A, 1);
+                shop.Hopper[0]++;
+            }
+
+            if (shop.Hopper[1] < r.BN + 1 && PartStock(r.B) > 0)
+            {
+                TakePart(r.B, 1);
+                shop.Hopper[1]++;
+            }
+
+            // продажа готового
+            shop.SellTimer -= dt;
+            if (shop.SellTimer <= 0f && shop.Output > 0 && !WantsPart(index))
+            {
+                shop.Output--;
+                int price = AssemblyPrice(index);
+                Money += price;
+                TotalRevenue += price;
+                ShiftRevenue += price;
+                TotalSold++;
+                ShiftSold++;
+                shop.SellTimer = shop.SellTime;
+            }
+
+            if (shop.Busy)
+            {
+                shop.Timer -= dt;
+                if (shop.Timer > 0f)
+                {
+                    shop.Status = "СБОРКА";
+                    return;
+                }
+
+                shop.Busy = false;
+                shop.Output++;
+                shop.Produced++;
+                TotalProduced++;
+                ShiftMadeAssembly[index]++;
+                shop.Status = "ГОТОВО";
+                return;
+            }
+
+            if (shop.Output >= AssemblyLine.Cap)
+            {
+                shop.Status = "СКЛАД ПОЛОН";
+                return;
+            }
+
+            if (shop.Hopper[0] < r.AN || shop.Hopper[1] < r.BN)
+            {
+                shop.Status = "ЖДЁТ ДЕТАЛИ";
+                return;
+            }
+
+            shop.Hopper[0] -= r.AN;
+            shop.Hopper[1] -= r.BN;
+            shop.Busy = true;
+            shop.Timer = shop.CraftTime;
+            shop.Status = "СБОРКА";
+        }
+
+        // Если следующая сборка ждёт эту деталь — не продаём, пусть сначала дойдёт до цеха.
+        // Иначе редукторы уходили бы в магазин быстрее, чем приводы успевали их забрать.
+        bool WantsPart(int index)
+        {
+            int id = 10 + index;
+            for (int i = 0; i < Assembly.Count; i++)
+            {
+                AssemblyLine shop = Assembly[i];
+                if (!shop.Built) continue;
+                if (shop.Recipe.A == id && shop.Hopper[0] < shop.Recipe.AN + 1) return true;
+                if (shop.Recipe.B == id && shop.Hopper[1] < shop.Recipe.BN + 1) return true;
+            }
+
+            return false;
+        }
+
+        // id < 10 — это склад линии, 10+ — склад сборки
+        int PartStock(int id)
+        {
+            if (id < 10) return Lines[id].Products;
+            return Assembly[id - 10].Output;
+        }
+
+        void TakePart(int id, int count)
+        {
+            if (id < 10) Lines[id].Products -= count;
+            else Assembly[id - 10].Output -= count;
+        }
+
+        // Постройка линии. Проверяем деньги и энергию ДО списания,
+        // иначе можно уйти в минус и получить странное состояние.
+        // 0.001f — костыль для сравнения float: у нас деньги дробные из-за премий.
         public UpgradeStatus TryBuildLine(int index)
         {
             if (index < 0 || index >= Lines.Count) return UpgradeStatus.MaxLevel;
@@ -480,6 +785,8 @@ namespace Game.Factory
             return UpgradeStatus.Ok;
         }
 
+        // Апгрейд станка. Считаем, сколько энергии будет ПОСЛЕ апгрейда:
+        // если не влезает в генераторы — отказываем, а не отключаем завод.
         public UpgradeStatus TryUpgradeMachine(int lineIndex, MachineKind kind)
         {
             if (lineIndex < 0 || lineIndex >= Lines.Count) return UpgradeStatus.MaxLevel;
@@ -502,6 +809,48 @@ namespace Game.Factory
             return UpgradeStatus.Ok;
         }
 
+        // Сборка строится и качается почти как линия, только энергия у неё
+        // зависит от рецепта (3 + уровень), а не фиксированные 6.
+        public UpgradeStatus TryBuildAssembly(int index)
+        {
+            if (index < 0 || index >= Assembly.Count) return UpgradeStatus.MaxLevel; // кривой индекс — молча игнорим
+
+            AssemblyLine shop = Assembly[index];
+            if (shop.Built) return UpgradeStatus.AlreadyBuilt;
+            if (Money + 0.001f < shop.BuildCost) return UpgradeStatus.NotEnoughMoney;
+            if (EnergyUsed + shop.EnergyDraw > EnergyCapacity) return UpgradeStatus.NotEnoughEnergy;
+
+            Money -= shop.BuildCost;
+            TotalSpent += shop.BuildCost;
+            shop.Built = true;
+            shop.Status = "ЖДЁТ ДЕТАЛИ";
+            SetEvent("Сборка «" + shop.Name + "» запущена · −$" + shop.BuildCost, EventTone.Good);
+            return UpgradeStatus.Ok;
+        }
+
+        public UpgradeStatus TryUpgradeAssembly(int index)
+        {
+            if (index < 0 || index >= Assembly.Count) return UpgradeStatus.MaxLevel;
+
+            AssemblyLine shop = Assembly[index];
+            if (!shop.Built) return UpgradeStatus.NotBuilt;
+            if (shop.Level >= MaxLevel) return UpgradeStatus.MaxLevel;
+
+            int cost = shop.UpgradeCost;
+            if (Money + 0.001f < cost) return UpgradeStatus.NotEnoughMoney;
+
+            int newUsed = EnergyUsed - shop.EnergyDraw + shop.NextEnergyDraw;
+            if (newUsed > EnergyCapacity) return UpgradeStatus.NotEnoughEnergy;
+
+            Money -= cost;
+            TotalSpent += cost;
+            shop.Level++;
+            SetEvent("Сборка «" + shop.Name + "» Lv " + shop.Level + " · −$" + cost, EventTone.Good);
+            return UpgradeStatus.Ok;
+        }
+
+        // Генератор энергию не тратит, только даёт. Зато за него каждый день
+        // берут топливо, так что качать его «на всякий случай» невыгодно.
         public UpgradeStatus TryUpgradeGenerator(int index)
         {
             if (index < 0 || index >= Generators.Count) return UpgradeStatus.MaxLevel;
@@ -518,6 +867,8 @@ namespace Game.Factory
             return UpgradeStatus.Ok;
         }
 
+        // Журнал держим коротким: в таблице всё равно видно только последние строки.
+        // 6 — с запасом, чтобы было что листать глазами.
         public void SetEvent(string text, EventTone tone)
         {
             LastEvent = text;
@@ -527,12 +878,16 @@ namespace Game.Factory
         }
     }
 
+    // Одна производственная линия = три станка + два склада.
+    // Линии полностью независимы: своя закупка, свой производитель, свой продавец.
+    // Поэтому в таблице у каждой линии отдельные уровни и остатки.
     public class LineState
     {
         public readonly ProductKind Kind;
         public bool Built;
-        public int Materials;
-        public int Products;
+        public int Materials;  // сырьё на складе
+        public int Products;   // готовая продукция на складе
+        public int Produced;   // всего сделано за игру, для статистики
 
         public readonly MachineState Buyer;
         public readonly MachineState Producer;
@@ -553,6 +908,7 @@ namespace Game.Factory
 
         public int EnergyDraw
         {
+            // Непостроенная линия энергии не ест — иначе старт был бы заблокирован.
             get { return Built ? Buyer.EnergyDraw + Producer.EnergyDraw + Seller.EnergyDraw : 0; }
         }
 
@@ -567,6 +923,9 @@ namespace Game.Factory
         }
     }
 
+    // Станок. Формулы специально простые, чтобы их можно было держать в голове:
+    // каждый уровень = +28% скорости и +1 энергии.
+    // Цена апгрейда растёт в 1.45 раза и округляется до 5.
     public class MachineState
     {
         public readonly MachineKind Kind;
@@ -584,7 +943,7 @@ namespace Game.Factory
         }
 
         public float Speed { get { return 1f + 0.28f * (Level - 1); } }
-        public int EnergyDraw { get { return 1 + Level; } }
+        public int EnergyDraw { get { return 1 + Level; } } // на первом уровне 2
         public int NextEnergyDraw { get { return EnergyDraw + 1; } }
 
         public float BuyInterval { get { return 3.2f / Speed; } }
@@ -632,6 +991,8 @@ namespace Game.Factory
         }
     }
 
+    // Генератор. Даёт +4 энергии за уровень, но и топливо дорожает.
+    // Два генератора на старте дают 8 — ровно хватает на одну линию с запасом.
     public class GeneratorState
     {
         public int Level = 1;

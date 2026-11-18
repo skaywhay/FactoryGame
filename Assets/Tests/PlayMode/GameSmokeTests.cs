@@ -10,6 +10,9 @@ using UnityEngine.UI;
 
 namespace Game.Tests
 {
+    // PlayMode-тест: грузит настоящую сцену, ждёт пару секунд,
+    // строит линию и сборку, открывает таблицу и делает скриншот.
+    // Если в игре есть ошибка в рантайме, она попадёт в errors и тест упадёт.
     public class FactoryPlayModeTests
     {
         [UnityTest]
@@ -62,6 +65,40 @@ namespace Game.Tests
                 yield return new WaitForSeconds(2f);
                 Assert.Greater(game.Sim.TotalBought + game.Sim.TotalProduced + game.Sim.TotalSold, 0,
                     "Production chain did not run during the shift");
+
+                game.DebugAddMoney(3000f);
+                game.DebugUpgradeGenerator(0);
+                yield return null;
+
+                // Ищем кнопку постройки по тексту: так тест не зависит от того,
+                // какая вкладка выбрана и как называются внутренние поля.
+                Button build = null;
+#if UNITY_2023_1_OR_NEWER
+                var buttons = Object.FindObjectsByType<Button>(FindObjectsSortMode.None);
+#else
+                var buttons = Object.FindObjectsOfType<Button>(true);
+#endif
+                foreach (var button in buttons)
+                {
+                    Text label = button.GetComponentInChildren<Text>();
+                    if (label != null && label.text.StartsWith("ПОСТРОИТЬ")) { build = button; break; }
+                }
+
+                Assert.IsNotNull(build, "Build button was not found");
+                build.onClick.Invoke();
+                yield return null;
+                Assert.IsTrue(game.Sim.Lines[1].Built, "Build button did not build the case line");
+
+                game.DebugUpgradeGenerator(0);
+                game.DebugAssembly(0);
+                yield return new WaitForSeconds(1f);
+                Assert.IsTrue(game.Sim.Assembly[0].Built, "Assembly line did not build");
+                yield return new WaitForSeconds(12f);
+                Assert.Greater(game.Sim.Assembly[0].Produced, 0, "Assembly produced nothing");
+
+                // заодно проверяем, что таблица открывается и не сыпет исключениями
+                game.DebugTable();
+                yield return new WaitForSeconds(0.3f);
 
                 string dir = Path.Combine(Directory.GetCurrentDirectory(), "TestArtifacts", "playmode");
                 Directory.CreateDirectory(dir);
@@ -120,6 +157,9 @@ namespace Game.Tests
                     "energy " + game.Sim.EnergyUsed + " / " + game.Sim.EnergyCapacity + "\n" +
                     "materials " + game.Sim.TotalMaterials + "\n" +
                     "products " + game.Sim.TotalProducts + "\n" +
+                    "assembly " + (game.Sim.Assembly[0].Built ? 1 : 0) + "\n" +
+                    "assembled " + game.Sim.Assembly[0].Produced + "\n" +
+                    "plan " + game.Sim.PlanText() + "\n" +
                     "screenshot " + file);
             }
             finally

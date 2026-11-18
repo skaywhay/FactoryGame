@@ -3,6 +3,9 @@ using Game.Factory;
 
 namespace Game.Tests
 {
+    // Тесты чистой симуляции: без сцены, без Unity-объектов, просто вызовы методов.
+    // Здесь проверяется экономика: план, энергия, склады, сборка и апгрейды.
+    // Гонять после каждого изменения баланса — они быстрые.
     public class FactorySimTests
     {
         static FactorySim NewSim()
@@ -357,6 +360,158 @@ namespace Game.Tests
             }
 
             Assert.Greater(sim.TotalSold, 0);
+        }
+        // План — это список конкретных деталей, а не сумма денег.
+        // Первый день самый простой: только шестерёнки.
+        [Test]
+        public void Plan_AsksForSpecificParts()
+        {
+            var sim = NewSim();
+
+            Assert.AreEqual(1, sim.Plan.Count);
+            Assert.AreEqual(0, sim.Plan[0].Part);
+            Assert.AreEqual(12, sim.Plan[0].Need);
+            Assert.IsFalse(sim.PlanComplete);
+        }
+
+        // Проверяем, что таблица планов действительно добавляет новые детали,
+        // а не залипает на первом дне.
+        [Test]
+        public void Plan_BringsNewPartsOnLaterDays()
+        {
+            var sim = NewSim();
+            int guard = 0;
+            while (!HasPlanPart(sim, 1) && guard++ < 10) sim.BeginDay();
+
+            Assert.IsTrue(HasPlanPart(sim, 1), "Case line never appeared in the plan");
+        }
+
+        [Test]
+        public void Plan_PaysPremiumWhenQuotaIsMade()
+        {
+            var sim = NewSim();
+            sim.ShiftMade[0] = sim.Plan[0].Need;
+            float before = sim.Money;
+            int premium = sim.Premium;
+
+            sim.EndDay();
+
+            Assert.IsTrue(sim.PlanDone);
+            Assert.AreEqual(before + premium, sim.Money, 0.01f);
+        }
+
+        static bool HasPlanPart(FactorySim sim, int part)
+        {
+            for (int i = 0; i < sim.Plan.Count; i++)
+                if (sim.Plan[i].Part == part) return true;
+            return false;
+        }
+
+        [Test]
+        public void Assembly_NeedsEnergyAndMoney()
+        {
+            var sim = NewSim();
+            sim.Money = 1000f;
+
+            Assert.AreEqual(UpgradeStatus.NotEnoughEnergy, sim.TryBuildAssembly(0));
+
+            sim.TryUpgradeGenerator(0);
+            Assert.AreEqual(UpgradeStatus.Ok, sim.TryBuildAssembly(0));
+            Assert.IsTrue(sim.Assembly[0].Built);
+            Assert.AreEqual(9, sim.EnergyUsed);
+        }
+
+        [Test]
+        public void Assembly_MakesReducerFromGearsAndCases()
+        {
+            var sim = NewSim();
+            sim.Money = 1000f;
+            sim.TryUpgradeGenerator(0);
+            sim.TryBuildAssembly(0);
+            Freeze(sim.Lines[0].Buyer);
+            Freeze(sim.Lines[0].Producer);
+            Freeze(sim.Lines[0].Seller);
+
+            sim.Lines[0].Products = 4;
+            sim.Lines[1].Products = 2;
+            int before = sim.TotalSold;
+
+            for (int i = 0; i < 100; i++) sim.Tick(0.1f);
+
+            Assert.GreaterOrEqual(sim.Assembly[0].Output + sim.TotalSold - before, 1);
+            Assert.LessOrEqual(sim.Lines[0].Products, 2);
+            Assert.LessOrEqual(sim.Lines[1].Products, 1);
+        }
+
+        [Test]
+        public void Assembly_WaitsWithoutParts()
+        {
+            var sim = NewSim();
+            sim.Money = 1000f;
+            sim.TryUpgradeGenerator(0);
+            sim.TryBuildAssembly(0);
+            Freeze(sim.Lines[0].Producer);
+            Freeze(sim.Lines[0].Seller);
+
+            sim.Tick(3f);
+
+            Assert.AreEqual(0, sim.Assembly[0].Output);
+            Assert.AreEqual("ЖДЁТ ДЕТАЛИ", sim.Assembly[0].Status);
+        }
+
+        // Самая важная проверка сборки: редуктор должен уйти на привод,
+        // а не в магазин. Именно на этом ломался старый вариант с одной сборкой.
+        [Test]
+        public void Assembly_ChainFeedsDriveFromReducers()
+        {
+            var sim = NewSim();
+            sim.Money = 5000f;
+            sim.TryUpgradeGenerator(0);
+            sim.TryUpgradeGenerator(0);
+            sim.TryUpgradeGenerator(1);
+
+            Assert.AreEqual(UpgradeStatus.Ok, sim.TryBuildAssembly(0));
+            Assert.AreEqual(UpgradeStatus.Ok, sim.TryBuildAssembly(1));
+
+            for (int l = 0; l < sim.Lines.Count; l++)
+            {
+                Freeze(sim.Lines[l].Buyer);
+                Freeze(sim.Lines[l].Producer);
+                Freeze(sim.Lines[l].Seller);
+            }
+
+            sim.Lines[0].Products = 8;
+            sim.Lines[1].Products = 4;
+            sim.Lines[2].Products = 4;
+
+            for (int i = 0; i < 300; i++) sim.Tick(0.1f);
+
+            Assert.Greater(sim.Assembly[1].Produced, 0, "Drive line never got a reducer");
+        }
+
+        [Test]
+        public void AssemblyPrice_IsHigherThanParts()
+        {
+            var sim = NewSim();
+            int parts = ProductInfo.BasePrice(ProductKind.Gear) * 2 + ProductInfo.BasePrice(ProductKind.Case);
+
+            Assert.Greater(sim.AssemblyPrice(0), parts);
+        }
+
+        [Test]
+        public void AssemblyUpgrade_MakesItFasterAndPricier()
+        {
+            var sim = NewSim();
+            sim.Money = 2000f;
+            sim.TryUpgradeGenerator(0);
+            sim.TryBuildAssembly(0);
+
+            float time = sim.Assembly[0].CraftTime;
+            int price = sim.AssemblyPrice(0);
+
+            Assert.AreEqual(UpgradeStatus.Ok, sim.TryUpgradeAssembly(0));
+            Assert.Less(sim.Assembly[0].CraftTime, time);
+            Assert.Greater(sim.AssemblyPrice(0), price);
         }
     }
 }

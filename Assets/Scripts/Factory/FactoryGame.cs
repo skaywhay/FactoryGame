@@ -2,6 +2,9 @@ using UnityEngine;
 
 namespace Game.Factory
 {
+    // Склейка трёх частей: симуляция (FactorySim), 3D-зал (HallBuilder) и HUD.
+    // Логики тут почти нет — только вызвать нужный метод и обновить подписи.
+    // Если хочется понять игру, начинать лучше с FactorySim.
     public class FactoryGame : MonoBehaviour
     {
         public FactorySim Sim { get; private set; }
@@ -16,6 +19,8 @@ namespace Game.Factory
             EnsureInitialized();
         }
 
+        // При рестарте сцена перезагружается, но на всякий случай умеем
+        // пересобрать зал, если он вдруг потерялся.
         void EnsureInitialized()
         {
             if (Sim == null) Sim = new FactorySim();
@@ -23,6 +28,7 @@ namespace Game.Factory
 
             if (_hall == null)
             {
+                // Удаляем всё, что осталось от предыдущей сборки зала.
                 for (int i = transform.childCount - 1; i >= 0; i--) Destroy(transform.GetChild(i).gameObject);
                 _hall = HallBuilder.Build(transform);
             }
@@ -35,6 +41,8 @@ namespace Game.Factory
             }
         }
 
+        // Порядок как в симуляции: сначала считаем экономику, потом
+        // разводим её по картинке и интерфейсу.
         void Update()
         {
             if (Sim == null || _hall == null || _hud == null) EnsureInitialized();
@@ -68,6 +76,26 @@ namespace Game.Factory
             else if (status == UpgradeStatus.NotEnoughEnergy) Sim.SetEvent("Для линии не хватает энергии", EventTone.Bad);
         }
 
+        // Кнопка на карточке сборки: если пост уже стоит — качаем, иначе строим.
+        // Ошибки показываем баннером, чтобы игрок понял, чего не хватает.
+        public void AssemblyAction(int index)
+        {
+            UpgradeStatus status = Sim.Assembly[index].Built
+                ? Sim.TryUpgradeAssembly(index)
+                : Sim.TryBuildAssembly(index);
+
+            if (status == UpgradeStatus.NotEnoughMoney) Sim.SetEvent("Не хватает денег на сборку", EventTone.Bad);
+            else if (status == UpgradeStatus.NotEnoughEnergy) Sim.SetEvent("Сначала нужно больше энергии", EventTone.Bad);
+        }
+
+        // debug: DebugAssembly(0..2) — строит/качает сборку без похода в UI
+        public void DebugAssembly(int index)
+        {
+            AssemblyAction(index);
+        }
+
+        // Ниже идут отладочные входы: их дёргают тесты и я из консоли.
+        // В обычной игре они не используются, но и не мешают.
         public void Restart()
         {
             UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
@@ -113,6 +141,8 @@ namespace Game.Factory
             UpgradeMachine(line, (MachineKind)kind);
         }
 
+        // Обновление зала. Тут только визуал: подписи, прогресс-бары и вращение.
+        // Никакой экономики — она уже посчитана в Sim.Tick.
         void UpdateHall(float dt)
         {
             bool running = Sim.ShiftActive && Sim.EnergyOk;
@@ -130,7 +160,8 @@ namespace Game.Factory
                     if (view.Sign.Info != null)
                     {
                         view.Sign.Info.text = line.Built
-                            ? "МАТ " + line.Materials + " · ТОВ " + line.Products + " · $" + Sim.SalePrice(line)
+                            ? "МАТ " + line.Materials + " · ТОВ " + line.Products + " · $" + Sim.SalePrice(line) +
+                              "\nСДЕЛАНО " + line.Produced
                             : "НЕ ПОСТРОЕНА · $" + line.BuildCost;
                         view.Sign.Info.color = line.Built
                             ? new Color(0.90f, 0.93f, 0.97f)
@@ -213,8 +244,63 @@ namespace Game.Factory
                     station.Spinners[s].Rotate(0f, direction * speed * dt, 0f, Space.Self);
                 }
             }
+
+            for (int i = 0; i < _hall.Assembly.Length && i < Sim.Assembly.Count; i++)
+            {
+                Station shop = _hall.Assembly[i];
+                AssemblyLine assembly = Sim.Assembly[i];
+                if (shop == null || shop.Root == null) continue;
+
+                if (shop.Info != null)
+                {
+                    string text;
+                    Color color;
+                    if (!assembly.Built)
+                    {
+                        text = "НЕ ПОСТРОЕНА · $" + assembly.BuildCost;
+                        color = new Color(0.74f, 0.78f, 0.85f);
+                    }
+                    else if (!Sim.EnergyOk)
+                    {
+                        text = "НЕТ ЭНЕРГИИ";
+                        color = new Color(1f, 0.40f, 0.36f);
+                    }
+                    else if (!Sim.ShiftActive)
+                    {
+                        text = Sim.Skipped ? "СМЕНА ПРОПУЩЕНА" : "ПЕРЕРЫВ";
+                        color = new Color(0.78f, 0.74f, 0.52f);
+                    }
+                    else
+                    {
+                        text = assembly.Status + " · " + assembly.Output + "/" + AssemblyLine.Cap +
+                               " · ВСЕГО " + assembly.Produced;
+                        color = new Color(0.82f, 0.86f, 0.92f);
+                    }
+
+                    shop.Info.text = text;
+                    shop.Info.color = color;
+                }
+
+                if (shop.ProgressFill != null)
+                {
+                    Vector3 scale = shop.ProgressFill.localScale;
+                    scale.x = Mathf.Max(0.001f, running ? assembly.CycleProgress : 0f);
+                    shop.ProgressFill.localScale = scale;
+                }
+
+                Face(shop.Title);
+                Face(shop.Info);
+
+                for (int s = 0; s < shop.Spinners.Count; s++)
+                {
+                    if (shop.Spinners[s] == null) continue;
+                    shop.Spinners[s].Rotate(0f, (running ? 40f : 6f) * dt, 0f, Space.Self);
+                }
+            }
         }
 
+        // Подписи — это TextMesh в мировых координатах, поэтому их надо
+        // поворачивать к камере вручную. Иначе при смене угла они «отваливаются».
         void Face(TextMesh label)
         {
             if (label == null || _hall.Camera == null) return;
@@ -222,6 +308,8 @@ namespace Game.Factory
             label.transform.rotation = Quaternion.LookRotation(d, Vector3.up);
         }
 
+        // Раз в 2 секунды отдаём метрики пробнику. Это не игровая логика,
+        // а способ автоматически проверить, что в билде всё живо.
         void UpdateProbe(float dt)
         {
             _probeTimer -= dt;
@@ -235,6 +323,8 @@ namespace Game.Factory
             GameProbe.Metric("materials", Sim.TotalMaterials);
             GameProbe.Metric("products", Sim.TotalProducts);
             GameProbe.Metric("totalSold", Sim.TotalSold);
+            GameProbe.Metric("planDone", Sim.PlanDoneCount);
+            GameProbe.Metric("planCount", Sim.Plan.Count);
 
             if (_probeDone) return;
             _probeDone = true;
@@ -244,6 +334,7 @@ namespace Game.Factory
             GameProbe.Check("three lines", Sim.Lines.Count == 3);
             GameProbe.Check("two generators", Sim.Generators.Count == 2);
             GameProbe.Check("gear line built", Sim.Lines[0].Built);
+            GameProbe.Check("daily plan has parts", Sim.Plan.Count > 0);
         }
     }
 }

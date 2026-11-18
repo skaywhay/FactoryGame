@@ -4,16 +4,19 @@ using UnityEngine.Rendering;
 
 namespace Game.Factory
 {
+    // Пост в зале: домик-станочек + подпись над ним + прогресс-бар.
+    // Root — это пустышка-родитель, чтобы удобно двигать всю группу.
     public class Station
     {
         public Transform Root;
         public TextMesh Title;
         public TextMesh Info;
         public Transform ProgressFill;
-        public readonly List<Transform> Spinners = new List<Transform>();
+        public readonly List<Transform> Spinners = new List<Transform>(); // что крутится
         public Color Accent = Color.white;
     }
 
+    // Одна линия в зале: ряд из трёх станков + табличка «линия не построена».
     public class LineView
     {
         public Transform Root;
@@ -26,21 +29,32 @@ namespace Game.Factory
     {
         public LineView[] Lines;
         public Station[] Generators;
+
+        // Тут раньше лежал один Station Assembly, потом появились ещё рецепты
+        // и пришлось сделать массив. Порядок = порядок Recipes.All.
+        public Station[] Assembly;
+
         public Camera Camera;
     }
 
+    // Собирает весь 3D-зал кодом. Координаты простые:
+    //   X — влево-вправо, Z — глубина (дальше = больше), Y — вверх.
+    // Камера смотрит с юга на север, поэтому «задняя» площадка — это большие Z.
     public static class HallBuilder
     {
         static Material _atlas;
         static Font _font;
 
-        const float RowGap = 6.2f;
+        const float RowGap = 6.2f; // расстояние между линиями по Z
 
         static readonly Color BuyerColor = new Color(0.98f, 0.62f, 0.22f);
         static readonly Color ProducerColor = new Color(0.35f, 0.78f, 0.98f);
         static readonly Color SellerColor = new Color(0.55f, 0.90f, 0.45f);
         static readonly Color GeneratorColor = new Color(0.99f, 0.85f, 0.30f);
+        static readonly Color AssemblyColor = new Color(0.95f, 0.58f, 0.72f);
 
+        // Цвета линий. Должны совпадать с Hud.LineColors, иначе вкладки
+        // и станки в зале будут разного цвета (уже наступал на это).
         static readonly Color[] LineColors =
         {
             new Color(0.98f, 0.74f, 0.28f),
@@ -48,9 +62,14 @@ namespace Game.Factory
             new Color(0.72f, 0.56f, 0.98f)
         };
 
+        // Камера смотрит немного сверху и сбоку. Цифры подбирал мышкой,
+        // чтобы влезли и линии, и задняя площадка со сборкой.
         static readonly Vector3 CameraPos = new Vector3(2.2f, 20.5f, -19.5f);
         static readonly Vector3 CameraTarget = new Vector3(2.6f, 0.5f, 3.0f);
 
+        // Собираем зал в фиксированном порядке: свет -> пол -> стены -> декор ->
+        // линии -> генераторы -> сборка -> камера. Камера последняя, чтобы
+        // сразу смотрела куда надо.
         public static HallRefs Build(Transform root)
         {
             LoadAssets();
@@ -66,19 +85,31 @@ namespace Game.Factory
             for (int i = 0; i < ProductInfo.Count; i++)
                 refs.Lines[i] = CreateLine(root, i, RowCenter(i));
 
+            // Генераторы уехали к стенам
             refs.Generators = new Station[2];
-            refs.Generators[0] = CreateGenerator(root, new Vector3(-4.4f, 0f, 11.2f), 0);
-            refs.Generators[1] = CreateGenerator(root, new Vector3(4.4f, 0f, 11.2f), 1);
+            refs.Generators[0] = CreateGenerator(root, new Vector3(-5f, 0f, 10.6f), 0);
+            refs.Generators[1] = CreateGenerator(root, new Vector3(5f, 0f, 10.6f), 1);
+
+            refs.Assembly = new Station[Recipes.All.Length];
+            for (int i = 0; i < Recipes.All.Length; i++)
+            {
+                // -6 / 0 / +6
+                float z = (i - 1) * 6f;
+                refs.Assembly[i] = CreateAssembly(root, new Vector3(12f, 0f, z), i);
+            }
 
             refs.Camera = CreateCamera(root);
             return refs;
         }
 
+        // Центрируем три линии вокруг нуля: -6.2 / 0 / +6.2.
         static float RowCenter(int index)
         {
             return (index - 1) * RowGap;
         }
 
+        // Грузим общий атлас из FactoryKit. Если текстуры нет — красим всё серым,
+        // игра всё равно запустится (пусть и выглядит скучно).
         static void LoadAssets()
         {
             Shader shader = Shader.Find("Standard");
@@ -100,6 +131,8 @@ namespace Game.Factory
             }
         }
 
+        // Простая заливка цветом. Каждый вызов создаёт новый материал —
+        // для прототипа нормально, для продакшена надо бы кэшировать.
         static Material Solid(string name, Color color, float smoothness = 0.15f)
         {
             Shader shader = Shader.Find("Standard");
@@ -112,6 +145,7 @@ namespace Game.Factory
             return material;
         }
 
+        // Unlit нужен для прогресс-баров: они не должны зависеть от света.
         static Material Unlit(string name, Color color)
         {
             Shader shader = Shader.Find("Unlit/Color");
@@ -123,6 +157,8 @@ namespace Game.Factory
             return material;
         }
 
+        // Все модели из FactoryKit используют один атлас, поэтому материал
+        // просто подменяем целиком, не разбираясь с подматериалами.
         static void ApplyAtlas(GameObject instance)
         {
             if (_atlas == null) return;
@@ -130,6 +166,8 @@ namespace Game.Factory
             for (int i = 0; i < renderers.Length; i++) renderers[i].sharedMaterial = _atlas;
         }
 
+        // Spawn ставит модель на пол и масштабирует по высоте.
+        // Высоту задаём вручную, потому что модели в наборе разного размера.
         static GameObject Spawn(string model, Transform parent, Vector3 position, float height, float yaw = 0f)
         {
             GameObject prefab = Resources.Load<GameObject>("FactoryKit/" + model);
@@ -146,6 +184,8 @@ namespace Game.Factory
             return instance;
         }
 
+        // В отличие от Spawn, тут масштаб по самой большой стороне.
+        // Нужно для шестерёнок: у них важна не высота, а диаметр.
         static GameObject SpawnSized(string model, Transform parent, Vector3 position, float maxSize, float yaw = 0f)
         {
             GameObject prefab = Resources.Load<GameObject>("FactoryKit/" + model);
@@ -196,6 +236,8 @@ namespace Game.Factory
             return true;
         }
 
+        // Шестерёнка крутится вокруг своей оси, поэтому заводим отдельный pivot:
+        // саму модель крутить нельзя, у неё центр не в центре.
         static Transform CreateCog(Transform parent, string model, Vector3 floorPoint, float diameter, float roll)
         {
             var pivot = new GameObject("Cog " + model);
@@ -242,6 +284,8 @@ namespace Game.Factory
             fill.transform.rotation = Quaternion.Euler(20f, 145f, 0f);
         }
 
+        // Пол и швы. Швы — просто тонкие кубики поверх плоскости,
+        // чтобы пол не выглядел однотонным. Коллайдеры удаляем, они тут не нужны.
         static void CreateFloor(Transform root)
         {
             var floor = GameObject.CreatePrimitive(PrimitiveType.Plane);
@@ -275,23 +319,22 @@ namespace Game.Factory
                 Object.Destroy(line.GetComponent<Collider>());
             }
 
+            // одна длинная плита под всеми постами: 2 генератора + 3 сборки
             var pad = GameObject.CreatePrimitive(PrimitiveType.Cube);
             pad.name = "Generator Pad";
             pad.transform.SetParent(root, false);
-            pad.transform.position = new Vector3(0f, 0.02f, 11.2f);
-            pad.transform.localScale = new Vector3(12f, 0.04f, 4.4f);
+            pad.transform.position = new Vector3(0f, 0.02f, 11.0f);
+            pad.transform.localScale = new Vector3(21f, 0.04f, 4.8f);
             pad.GetComponent<Renderer>().sharedMaterial = Solid("Pad", new Color(0.22f, 0.21f, 0.16f));
             Object.Destroy(pad.GetComponent<Collider>());
         }
 
+        // Декор по краям. Слева-справа конвейеры и знаки, чтобы зал не казался пустым.
+        // Ящики у генераторов убрал: они стояли ровно там, куда встали новые посты.
         static void CreateProps(Transform root)
         {
-            Spawn("box-large", root, new Vector3(-9.4f, 0f, 9.4f), 0.62f, 12f);
-            Spawn("box-large", root, new Vector3(-8.9f, 0f, 10.1f), 0.52f, -18f);
-            Spawn("box-small", root, new Vector3(-9.4f, 0.6f, 9.4f), 0.38f, 30f);
-            Spawn("box-long", root, new Vector3(9.4f, 0f, 9.2f), 0.5f, -8f);
-            Spawn("box-large", root, new Vector3(9.1f, 0f, 10.1f), 0.55f, 22f);
-            Spawn("box-small", root, new Vector3(9.4f, 0.48f, 9.2f), 0.32f, 14f);
+            // TODO: сюда просились ящики у ±9.4, но там теперь генераторы.
+            // Оставил только конвейеры и знаки, иначе коробки торчат из станков.
             Spawn("conveyor", root, new Vector3(-9.5f, 0f, 0.5f), 0.5f, 90f);
             Spawn("conveyor", root, new Vector3(9.5f, 0f, 0.5f), 0.5f, 90f);
             Spawn("warning-traffic", root, new Vector3(-9.1f, 0f, -6.4f), 0.72f, 10f);
@@ -300,6 +343,8 @@ namespace Game.Factory
             Spawn("warning-traffic", root, new Vector3(9.1f, 0f, 4.6f), 0.72f, -25f);
         }
 
+        // Задняя стена собрана из кусочков structure-wall. Это не из-за красоты:
+        // целая стена из одной модели смотрелась растянутой.
         static void CreateWalls(Transform root)
         {
             Material wall = Solid("Wall", new Color(0.17f, 0.19f, 0.24f), 0.1f);
@@ -331,6 +376,8 @@ namespace Game.Factory
             for (int i = 0; i < renderers.Length; i++) renderers[i].sharedMaterial = material;
         }
 
+        // Создаёт одну линию: площадка + три станка + пустышка-заглушка,
+        // которая видна, пока линия не построена.
         static LineView CreateLine(Transform root, int index, float z)
         {
             Color tone = LineColors[index];
@@ -514,8 +561,37 @@ namespace Game.Factory
             return station;
         }
 
-        static Station NewStation(Transform root, string name, Vector3 position, Color accent)
+        // Один сборочный пост. Моделька та же, что была у старой «сборки»,
+        // только подпись берём из рецепта и чуть разбавляем декор по индексу,
+        // чтобы три поста не выглядели клонами.
+        static Station CreateAssembly(Transform root, Vector3 position, int index)
         {
+            Recipe recipe = Recipes.All[index];
+            Station station = NewStation(root, "Assembly " + recipe.Name, position, AssemblyColor);
+            CreatePad(station.Root, AssemblyColor, 3.2f);
+
+            Spawn("machine-fortified", station.Root, new Vector3(0f, 0f, 0.1f), 1.75f, 180f);
+            Spawn("hopper-square", station.Root, new Vector3(0f, 1.72f, 0.1f), 0.72f, 180f);
+
+            GameObject arm = Spawn("robot-arm-b", station.Root, new Vector3(-1.35f, 0f, -0.35f), 1.35f, 205f);
+            if (arm != null && arm.transform.childCount > 0) station.Spinners.Add(arm.transform.GetChild(0));
+
+            Spawn("box-large", station.Root, new Vector3(1.25f, 0f, -0.5f), 0.42f, 18f);
+            Spawn("box-small", station.Root, new Vector3(1.23f, 0.42f, -0.5f), 0.24f, -20f);
+
+            // у последнего поста (турбина) деталей больше, пусть будет второй ящик
+            if (index == Recipes.All.Length - 1)
+                Spawn("box-long", station.Root, new Vector3(1.35f, 0f, 0.35f), 0.36f, 74f);
+
+            station.Title = MakeLabel(station.Root, "СБОРКА · " + recipe.Name.ToUpper(),
+                new Vector3(0f, 4.14f, 0f), AssemblyColor, 0.036f);
+            station.Info = MakeLabel(station.Root, "НЕ ПОСТРОЕНА · $" + recipe.BuildCost,
+                new Vector3(0f, 3.82f, 0f), MutedText, 0.032f);
+            station.ProgressFill = MakeProgress(station.Root, new Vector3(0f, 3.60f, 0f), 1.6f, AssemblyColor);
+            return station;
+        }
+
+        static Station NewStation(Transform root, string name, Vector3 position, Color accent)        {
             var go = new GameObject(name);
             go.transform.SetParent(root, false);
             go.transform.localPosition = position;
@@ -523,6 +599,8 @@ namespace Game.Factory
             return new Station { Root = go.transform, Accent = accent };
         }
 
+        // Круглая площадка под станком. Чуть приподнята над полом,
+        // иначе местами z-fighting и пол «мигает».
         static void CreatePad(Transform parent, Color accent, float size)
         {
             var pad = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -534,6 +612,8 @@ namespace Game.Factory
             Object.Destroy(pad.GetComponent<Collider>());
         }
 
+        // Подпись — обычный TextMesh. Размер characterSize подобран под масштаб зала;
+        // если менять камеру, придётся подкрутить и его.
         static TextMesh MakeLabel(Transform parent, string text, Vector3 localPosition, Color color, float size)
         {
             var go = new GameObject("Label " + text);
@@ -554,6 +634,8 @@ namespace Game.Factory
             return mesh;
         }
 
+        // Прогресс-бар из двух квадов. Хитрость: заполнение растягивается
+        // не от центра, а от левого края, поэтому есть отдельный pivot.
         static Transform MakeProgress(Transform parent, Vector3 localPosition, float width, Color color)
         {
             var back = GameObject.CreatePrimitive(PrimitiveType.Quad);
@@ -579,6 +661,8 @@ namespace Game.Factory
             return pivot.transform;
         }
 
+        // Камера одна и статичная. Если её нет в сцене — создаём.
+        // Позицию не меняем в рантайме, поэтому зал всегда выглядит одинаково.
         static Camera CreateCamera(Transform root)
         {
             Camera camera = Camera.main;

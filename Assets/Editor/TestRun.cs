@@ -5,6 +5,9 @@ using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
+// Запуск тестов из меню Unity. Нужно, потому что batch-mode нельзя:
+// редактор уже открыт и занят проектом.
+// Результаты пишутся в TestArtifacts/<name>-results.txt — их читает агент/я.
 public static class TestRun
 {
     const string Folder = "TestArtifacts";
@@ -26,12 +29,15 @@ public static class TestRun
 
     static void Run(TestMode mode, string name)
     {
+        // API создаём один раз, иначе после первого прогона колбэки дублируются.
         if (_api == null) _api = ScriptableObject.CreateInstance<TestRunnerApi>();
         _report = new Report(name);
         _api.RegisterCallbacks(_report);
         _api.Execute(new ExecutionSettings(new Filter { testMode = mode }));
     }
 
+    // Простой отчёт: по строке на тест. Этого хватает, чтобы глазами
+    // увидеть, что упало, без открытия Test Runner.
     class Report : ICallbacks
     {
         readonly string _name;

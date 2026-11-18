@@ -4,6 +4,8 @@ using UnityEngine.UI;
 
 namespace Game.Factory
 {
+    // Весь HUD рисуется кодом, без префабов: так проще править, но файл большой.
+    // Ориентир по координатам — левый верхний угол панели (anchor 0,1).
     public class Hud
     {
         class Card
@@ -28,6 +30,7 @@ namespace Game.Factory
             public Text Status;
         }
 
+        // Поля HUD. Тут просто ссылки на тексты, чтобы не искать их каждый кадр.
         readonly FactoryGame _game;
 
         Text _money;
@@ -38,16 +41,21 @@ namespace Game.Factory
         Text _materials;
         Text _upkeep;
         Text _banner;
+        Text _planDetail;
         Text _tableTotals;
         Text _journal;
         Text _gameOverText;
         GameObject _gameOver;
 
+        // 3 карточки станков + 2 генератора + 3 сборки + карточка постройки линии.
+        // Карточки станков и сборок делят одни и те же места на панели.
         readonly Card[] _cards = new Card[3];
         readonly Card[] _generators = new Card[2];
+        readonly Card[] _assemblyCards = new Card[3];
+
         Card _build;
         Button[] _tabs;
-        Row[] _rows;
+        Row[] _rows; // 3 линии + 3 сборки
 
         GameObject _table;
         Text _tableButtonLabel;
@@ -74,6 +82,7 @@ namespace Game.Factory
         Text _hintText;
 
         int _selected;
+        int _buildTarget = -1;
 
         static Font _font;
         static readonly Color Panel = new Color(0.075f, 0.085f, 0.11f, 0.94f);
@@ -114,6 +123,7 @@ namespace Game.Factory
 
         void Build()
         {
+            // Без EventSystem кнопки не нажимаются. В сцене его нет, поэтому создаём here.
             if (EventSystem.current == null)
             {
                 var events = new GameObject("EventSystem");
@@ -143,6 +153,8 @@ namespace Game.Factory
 
         void BuildTopBar(RectTransform root)
         {
+            // Верхняя полоса: деньги, день, план, смена, энергия, склады, топливо.
+            // Координаты X — просто подбор ширины, ничего умного тут нет.
             RectTransform bar = NewRect(root, "Top Bar");
             bar.anchorMin = new Vector2(0f, 1f);
             bar.anchorMax = new Vector2(1f, 1f);
@@ -153,10 +165,10 @@ namespace Game.Factory
 
             _money = Stat(bar, "Money", 20f, 150f, "$ 250", new Color(1f, 0.83f, 0.33f), 30, FontStyle.Bold);
             _day = Stat(bar, "Day", 175f, 130f, "ДЕНЬ 1", TextColor, 23, FontStyle.Bold);
-            _plan = Stat(bar, "Plan", 310f, 270f, "ПЛАН $0 / $200", new Color(0.85f, 0.90f, 1f), 21, FontStyle.Bold);
+            _plan = Stat(bar, "Plan", 310f, 270f, "ПЛАН 0/3", new Color(0.85f, 0.90f, 1f), 21, FontStyle.Bold);
             _phase = Stat(bar, "Phase", 585f, 170f, "СМЕНА 40.0с", new Color(0.75f, 0.85f, 1f), 21, FontStyle.Normal);
-            _energy = Stat(bar, "Energy", 760f, 180f, "ЭНЕРГИЯ 6 / 8", new Color(0.55f, 0.9f, 0.6f), 23, FontStyle.Bold);
-            _materials = Stat(bar, "Materials", 945f, 220f, "МАТ 0/30 · ТОВ 0/30", TextColor, 20, FontStyle.Normal);
+            _energy = Stat(bar, "Energy", 760f, 180f, "ЭНЕРГИЯ 6 / 8", new Color(0.55f, 0.9f, 0.6f), 21, FontStyle.Bold);
+            _materials = Stat(bar, "Materials", 950f, 215f, "МАТ 0/30 · ТОВ 0/30", TextColor, 19, FontStyle.Normal);
             _upkeep = Stat(bar, "Upkeep", 1170f, 220f, "ТОПЛИВО $20/день", new Color(0.95f, 0.78f, 0.42f), 20, FontStyle.Normal);
 
             Button tutorial = NewButton(bar, "Tutorial", "ОБУЧЕНИЕ", new Color(0.24f, 0.62f, 0.55f), 17);
@@ -212,24 +224,36 @@ namespace Game.Factory
             rect.anchoredPosition = new Vector2(-180f, -84f);
             rect.sizeDelta = new Vector2(1200f, 48f);
             _banner.fontStyle = FontStyle.Bold;
+
+            // Под баннером висит расшифровка плана: какие детали и сколько нужно сделать.
+            // Строка длинная, поэтому вынес её отдельно, в топбар она не влезала.
+            _planDetail = NewText(root, "Plan Detail", "", 18, new Color(0.85f, 0.90f, 1f), TextAnchor.MiddleCenter);
+            RectTransform planRect = _planDetail.rectTransform;
+            planRect.anchorMin = new Vector2(0.5f, 1f);
+            planRect.anchorMax = new Vector2(0.5f, 1f);
+            planRect.pivot = new Vector2(0.5f, 1f);
+            planRect.anchoredPosition = new Vector2(-180f, -134f);
+            planRect.sizeDelta = new Vector2(1200f, 30f);
         }
 
         void BuildSidebar(RectTransform root)
         {
+            // Правая панель шириной 400. Карточки шириной 376 — 12 отступ слева,
+            // 12 справа. Если менять ширину панели, придётся править и карточки.
             RectTransform panel = NewRect(root, "Sidebar");
             panel.anchorMin = new Vector2(1f, 1f);
             panel.anchorMax = new Vector2(1f, 1f);
             panel.pivot = new Vector2(1f, 1f);
-            panel.anchoredPosition = new Vector2(-16f, -136f);
-            panel.sizeDelta = new Vector2(400f, 866f);
+            panel.anchoredPosition = new Vector2(-16f, -84f);
+            panel.sizeDelta = new Vector2(400f, 850f);
             AddImage(panel, Panel);
 
             BuildTabs(panel);
 
             string[] titles = { "ЗАКУПЩИК", "ПРОИЗВОДИТЕЛЬ", "ПРОДАВЕЦ" };
             Color[] colors = { BuyerColor, ProducerColor, SellerColor };
-            float[] tops = { 62f, 190f, 338f };
-            float[] heights = { 120f, 140f, 120f };
+            float[] tops = { 62f, 178f, 306f };
+            float[] heights = { 108f, 120f, 108f };
 
             for (int i = 0; i < 3; i++)
             {
@@ -238,35 +262,53 @@ namespace Game.Factory
                     delegate { _game.UpgradeMachine(_selected, kind); });
             }
 
-            _generators[0] = BuildCard(panel, "ГЕНЕРАТОР 1", GeneratorColor, 12f, 466f, 376f, 108f,
+            _generators[0] = BuildCard(panel, "ГЕНЕРАТОР 1", GeneratorColor, 12f, 422f, 376f, 96f,
                 delegate { _game.UpgradeGenerator(0); });
-            _generators[1] = BuildCard(panel, "ГЕНЕРАТОР 2", GeneratorColor, 12f, 582f, 376f, 108f,
+            _generators[1] = BuildCard(panel, "ГЕНЕРАТОР 2", GeneratorColor, 12f, 526f, 376f, 96f,
                 delegate { _game.UpgradeGenerator(1); });
 
-            _build = BuildCard(panel, "НОВАЯ ЛИНИЯ", new Color(0.50f, 0.72f, 0.98f), 12f, 698f, 376f, 108f,
-                delegate { _game.BuildLine(_selected); });
+            for (int i = 0; i < _assemblyCards.Length; i++)
+            {
+                int index = i; // без локальной копии лямбда подхватит последний i
+                _assemblyCards[i] = BuildCard(panel, "СБОРКА · " + Recipes.All[i].Name.ToUpper(),
+                    new Color(0.95f, 0.58f, 0.72f), 12f, tops[i], 376f, heights[i],
+                    delegate { _game.AssemblyAction(index); });
+                _assemblyCards[i].Title.fontSize = 16;
+                _assemblyCards[i].Title.rectTransform.sizeDelta = new Vector2(230f, 26f);
+            }
+
+            _build = BuildCard(panel, "НОВАЯ ЛИНИЯ", new Color(0.50f, 0.72f, 0.98f), 12f, 734f, 376f, 96f,
+                delegate { _game.BuildLine(_buildTarget); });
         }
 
         void BuildTabs(RectTransform parent)
         {
-            _tabs = new Button[ProductInfo.Count];
-            float width = 118f;
+            // 3 линии + вкладка сборки. Ширину поджал, иначе «СБОРКА» не влезала.
+            _tabs = new Button[ProductInfo.Count + 1];
+            float width = 88f;
+            float gap = 6f;
 
-            for (int i = 0; i < ProductInfo.Count; i++)
+            for (int i = 0; i < _tabs.Length; i++)
             {
                 int index = i;
-                Button tab = NewButton(parent, "Tab " + i, ProductInfo.ShortName((ProductKind)i), Dim, 16);
+                string label = i < ProductInfo.Count
+                    ? ProductInfo.ShortName((ProductKind)i)
+                    : "СБОРКА";
+
+                Button tab = NewButton(parent, "Tab " + i, label, Dim, 14);
                 RectTransform rect = tab.GetComponent<RectTransform>();
                 rect.anchorMin = new Vector2(0f, 1f);
                 rect.anchorMax = new Vector2(0f, 1f);
                 rect.pivot = new Vector2(0f, 1f);
-                rect.anchoredPosition = new Vector2(12f + i * (width + 8f), -12f);
+                rect.anchoredPosition = new Vector2(12f + i * (width + gap), -12f);
                 rect.sizeDelta = new Vector2(width, 38f);
                 tab.onClick.AddListener(delegate { _selected = index; });
                 _tabs[i] = tab;
             }
         }
 
+        // Универсальная карточка: цветная полоска слева, заголовок, уровень,
+        // две строки текста и кнопка справа снизу. Всё остальное — копипаста.
         Card BuildCard(RectTransform parent, string title, Color accent, float x, float top, float width, float height, UnityEngine.Events.UnityAction onClick)
         {
             var card = new Card { Accent = accent };
@@ -317,6 +359,8 @@ namespace Game.Factory
 
         void BuildTable(RectTransform root)
         {
+            // Таблица собрана руками, без LayoutGroup. Плюс: всё предсказуемо.
+            // Минус: если добавишь строку, придётся самому двигать итоги и журнал.
             _table = NewRect(root, "Table").gameObject;
             RectTransform shade = _table.GetComponent<RectTransform>();
             shade.anchorMin = Vector2.zero;
@@ -329,7 +373,7 @@ namespace Game.Factory
             panel.anchorMin = new Vector2(0.5f, 0.5f);
             panel.anchorMax = new Vector2(0.5f, 0.5f);
             panel.pivot = new Vector2(0.5f, 0.5f);
-            panel.sizeDelta = new Vector2(920f, 500f);
+            panel.sizeDelta = new Vector2(920f, 720f);
             AddImage(panel, new Color(0.09f, 0.10f, 0.13f, 0.99f));
 
             Text title = NewText(panel, "Title", "МАТЕРИАЛЫ И ПРОДУКЦИЯ", 22, TextColor, TextAnchor.UpperLeft);
@@ -356,17 +400,20 @@ namespace Game.Factory
                 head.fontStyle = FontStyle.Bold;
             }
 
-            _rows = new Row[ProductInfo.Count];
-            for (int i = 0; i < ProductInfo.Count; i++)
+            // 3 линии + 3 сборки = 6 строк. Шаг 62, чтобы всё влезло без скролла
+            // (скролл делать было лень, честно).
+            _rows = new Row[ProductInfo.Count + Recipes.All.Length];
+            for (int i = 0; i < _rows.Length; i++)
             {
-                float y = -92f - i * 66f;
+                float y = -92f - i * 62f;
                 RectTransform row = NewRect(panel, "Row " + i);
-                SetRect(row, new Vector2(16f, y), new Vector2(868f, 58f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+                SetRect(row, new Vector2(16f, y), new Vector2(868f, 56f), new Vector2(0f, 1f), new Vector2(0f, 1f));
                 AddImage(row, i % 2 == 0 ? new Color(0.13f, 0.145f, 0.18f, 0.95f) : new Color(0.10f, 0.115f, 0.145f, 0.95f));
 
                 _rows[i] = new Row();
-                _rows[i].Line = NewText(row, "Line", "", 18, LineColors[i], TextAnchor.MiddleLeft);
-                SetRect(_rows[i].Line.rectTransform, new Vector2(10f, 0f), new Vector2(190f, 50f), new Vector2(0f, 0f), new Vector2(0f, 1f));
+                Color tone = i < LineColors.Length ? LineColors[i] : new Color(0.95f, 0.58f, 0.72f);
+                _rows[i].Line = NewText(row, "Line", "", 18, tone, TextAnchor.MiddleLeft);
+                SetRect(_rows[i].Line.rectTransform, new Vector2(10f, 0f), new Vector2(190f, 48f), new Vector2(0f, 0f), new Vector2(0f, 1f));
                 _rows[i].Line.fontStyle = FontStyle.Bold;
 
                 _rows[i].Materials = TableText(row, "Materials", 10f + 196f - 16f, 100f);
@@ -377,21 +424,21 @@ namespace Game.Factory
             }
 
             _tableTotals = NewText(panel, "Totals", "", 15, Muted, TextAnchor.UpperLeft);
-            SetRect(_tableTotals.rectTransform, new Vector2(24f, -300f), new Vector2(872f, 46f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            SetRect(_tableTotals.rectTransform, new Vector2(24f, -462f), new Vector2(872f, 80f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             _tableTotals.horizontalOverflow = HorizontalWrapMode.Wrap;
 
             Text journalTitle = NewText(panel, "Journal Title", "ЖУРНАЛ", 15, new Color(0.55f, 0.72f, 0.95f), TextAnchor.UpperLeft);
-            SetRect(journalTitle.rectTransform, new Vector2(24f, -352f), new Vector2(300f, 22f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            SetRect(journalTitle.rectTransform, new Vector2(24f, -548f), new Vector2(300f, 22f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             journalTitle.fontStyle = FontStyle.Bold;
 
             _journal = NewText(panel, "Journal", "", 15, Muted, TextAnchor.UpperLeft);
-            SetRect(_journal.rectTransform, new Vector2(24f, -378f), new Vector2(872f, 100f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            SetRect(_journal.rectTransform, new Vector2(24f, -572f), new Vector2(872f, 88f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             _journal.horizontalOverflow = HorizontalWrapMode.Wrap;
             _journal.verticalOverflow = VerticalWrapMode.Truncate;
 
             Text note = NewText(panel, "Note",
                 "Закупщик берёт материалы за деньги. Производитель ждёт материалы, продавец ждёт готовый товар.\n" +
-                "Каждая линия — отдельные машины, отдельный склад и отдельные улучшения.",
+                "Каждая линия — отдельные машины, отдельный склад и отдельные улучшения. Сборка ест готовые детали линий.",
                 14, new Color(0.52f, 0.57f, 0.65f), TextAnchor.LowerLeft);
             SetRect(note.rectTransform, new Vector2(24f, 10f), new Vector2(872f, 42f), new Vector2(0f, 0f), new Vector2(0f, 0f));
 
@@ -455,6 +502,8 @@ namespace Game.Factory
 
         void BuildTutorial(RectTransform root)
         {
+            // Обучалка — четыре шага. Тексты лежат прямо в SetTutorialStep,
+            // потому что выносить их в ассеты ради прототипа было лень.
             _tutorial = NewRect(root, "Tutorial").gameObject;
             RectTransform shade = _tutorial.GetComponent<RectTransform>();
             shade.anchorMin = Vector2.zero;
@@ -558,6 +607,8 @@ namespace Game.Factory
 
         void BuildHintCard(RectTransform root)
         {
+            // Подсказка в левом нижнем углу. Она меняется в зависимости от того,
+            // что сейчас болит у игрока: энергия, деньги или план.
             _hintCard = NewRect(root, "Hint Card").gameObject;
             RectTransform rect = _hintCard.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 0f);
@@ -669,22 +720,21 @@ namespace Game.Factory
             else if (_tutorialStep == 2)
             {
                 _tutorialStepTitle.text = "3. СМЕНЫ, ПЛАН И БАНКРОТСТВО";
-                _tutorialSubTitle.text = "Удерживайте завод на плаву и выполняйте ежедневные нормы выручки:";
+                _tutorialSubTitle.text = "Каждый день завод должен сделать нужные детали — смотрите строку плана под верхней панелью:";
 
                 _tutorialPoint1Title.text = "· СМЕНА 40 СЕКУНД";
                 _tutorialPoint1Title.color = new Color(0.85f, 0.90f, 1f);
-                _tutorialPoint1Desc.text = "Каждый день длится 40 секунд смены. В верхнем баре виден таймер смены и прогресс выполнения плана.";
+                _tutorialPoint1Desc.text = "День длится 40 секунд. В плане написано, сколько шестерёнок, корпусов, микросхем и сборок нужно успеть сделать.";
 
                 _tutorialPoint2Title.text = "· ПРЕМИЯ ЗА ПЛАН";
                 _tutorialPoint2Title.color = new Color(0.55f, 0.95f, 0.60f);
-                _tutorialPoint2Desc.text = "Выполнение плана дня даёт щедрую денежную премию. Завтра план вырастет — готовьтесь!";
+                _tutorialPoint2Desc.text = "Сделали всё по плану — получаете премию деньгами. Завтра нормы вырастут, так что вкладывайтесь в станки.";
 
                 _tutorialPoint3Title.text = "· 3 СТРАЙКА = КОНЕЦ";
                 _tutorialPoint3Title.color = new Color(1f, 0.48f, 0.42f);
                 _tutorialPoint3Desc.text = "Провал плана или нехватка денег на топливо дают штраф (страйк ✕). 3 страйка — банкротство и конец игры.";
 
-                _tutorialTipText.text = "СОВЕТ: Не держите прибыль мёртвым грузом — инвестируйте деньги в прокачку станков и новые линии.";
-            }
+                _tutorialTipText.text = "СОВЕТ: Не держите прибыль мёртвым грузом — инвестируйте деньги в прокачку станков и новые линии.";            }
             else
             {
                 _tutorialStepTitle.text = "4. РАСШИРЕНИЕ И СТАТИСТИКА";
@@ -692,7 +742,7 @@ namespace Game.Factory
 
                 _tutorialPoint1Title.text = "· ВКЛАДКИ ЛИНИЙ";
                 _tutorialPoint1Title.color = LineColors[1];
-                _tutorialPoint1Desc.text = "Вверху правой панели переключайтесь между линиями: «ШЕСТ.» (Шестерёнки), «КОРПУС» и «МИКРО».";
+                _tutorialPoint1Desc.text = "Вверху правой панели переключайтесь между линиями: «ШЕСТ.» (Шестерёнки), «КОРПУС», «МИКРО» и «СБОРКА».";
 
                 _tutorialPoint2Title.text = "· ПРОКАЧКА СТАНКОВ";
                 _tutorialPoint2Title.color = SellerColor;
@@ -702,7 +752,7 @@ namespace Game.Factory
                 _tutorialPoint3Title.color = new Color(0.28f, 0.45f, 0.72f);
                 _tutorialPoint3Desc.text = "Кнопка «ТАБЛИЦА» вверху открывает подробную финансовую статистику, остатки сырья и журнал событий.";
 
-                _tutorialTipText.text = "СОВЕТ: Линия Корпусов требует 2 сырья, но приносит больше выручки; Микросхемы — самый доходный товар.";
+                _tutorialTipText.text = "СОВЕТ: Сборка делает редукторы, приводы и турбины из готовых деталей — это самая дорогая продукция.";
             }
         }
 
@@ -723,6 +773,9 @@ namespace Game.Factory
 
         void UpdateHint(FactorySim sim)
         {
+            // Приоритет подсказок: сначала самое критичное.
+            // Пока не продали ни одной штуки — объясняем базу, потом энергия,
+            // потом деньги, потом план, потом новые линии/сборка.
             if (_hintCard == null || !_hintCard.activeSelf || _hintText == null) return;
 
             if (sim.Day == 1 && sim.TotalSold == 0)
@@ -737,13 +790,17 @@ namespace Game.Factory
             {
                 _hintText.text = "Есть деньги на улучшение! Нажмите «УЛУЧШИТЬ» у Закупщика или Производителя.";
             }
-            else if (sim.ShiftRevenue + 0.5f >= sim.PlanTarget)
+            else if (sim.PlanComplete)
             {
                 _hintText.text = "План дня выполнен! В конце смены будет премия. Копите на линию «КОРПУСА».";
             }
             else if (sim.Day >= 2 && !sim.Lines[1].Built && sim.Money >= 180f && sim.EnergyCapacity - sim.EnergyUsed >= FactorySim.LineEnergy)
             {
                 _hintText.text = "Хватает средств на вторую линию! Переключитесь на «КОРПУС» и постройте её.";
+            }
+            else if (!AnyAssemblyBuilt(sim) && sim.Money >= sim.Assembly[0].BuildCost)
+            {
+                _hintText.text = "Можно открыть сборку: редукторы из шестерёнок и корпусов стоят дороже.";
             }
             else
             {
@@ -766,6 +823,8 @@ namespace Game.Factory
 
         public void Tick()
         {
+            // Tick дергается каждый кадр. Тут только чтение Sim и запись текстов,
+            // ничего не создаём и не уничтожаем — иначе Unity быстро расстроится.
             FactorySim sim = _game.Sim;
             if (sim == null) return;
 
@@ -774,9 +833,14 @@ namespace Game.Factory
             _day.color = sim.Strikes > 0 ? new Color(1f, 0.55f, 0.48f) : TextColor;
             _phase.text = sim.PhaseText;
 
-            bool planMet = sim.ShiftRevenue + 0.5f >= sim.PlanTarget;
-            _plan.text = "ПЛАН $" + Mathf.FloorToInt(sim.ShiftRevenue) + " / $" + sim.PlanTarget;
+            bool planMet = sim.PlanComplete;
+            _plan.text = "ПЛАН " + sim.PlanDoneCount + "/" + sim.Plan.Count;
             _plan.color = planMet
+                ? new Color(0.55f, 0.95f, 0.60f)
+                : (sim.ShiftActive ? new Color(0.85f, 0.90f, 1f) : new Color(0.95f, 0.78f, 0.42f));
+
+            _planDetail.text = sim.PlanText();
+            _planDetail.color = planMet
                 ? new Color(0.55f, 0.95f, 0.60f)
                 : (sim.ShiftActive ? new Color(0.85f, 0.90f, 1f) : new Color(0.95f, 0.78f, 0.42f));
 
@@ -804,30 +868,55 @@ namespace Game.Factory
 
             if (_gameOver.activeSelf != sim.GameOver) _gameOver.SetActive(sim.GameOver);
 
-            if (_selected < 0 || _selected >= sim.Lines.Count) _selected = 0;
+            // _selected может указывать и на вкладку сборки (индекс 3).
+            // Табы: 0..2 линии, 3 сборки.
+            if (_selected < 0 || _selected > sim.Lines.Count) _selected = 0;
 
             UpdateTabs(sim);
-            UpdateMachines(sim);
+            UpdateCardsVisible(sim);
+            if (_selected < sim.Lines.Count) UpdateMachines(sim);
+            else UpdateAssemblyCards(sim);
             UpdateGenerators(sim);
             UpdateBuild(sim);
             UpdateTable(sim);
             UpdateHint(sim);
         }
 
+        // Карточки станков и сборок занимают одни и те же места в панели,
+        // поэтому просто прячем ненужный набор.
+        void UpdateCardsVisible(FactorySim sim)
+        {
+            bool machines = _selected < sim.Lines.Count;
+            for (int i = 0; i < _cards.Length; i++)
+                if (_cards[i].Root != null) _cards[i].Root.gameObject.SetActive(machines);
+            for (int i = 0; i < _assemblyCards.Length; i++)
+                if (_assemblyCards[i].Root != null) _assemblyCards[i].Root.gameObject.SetActive(!machines);
+        }
+
         void UpdateTabs(FactorySim sim)
         {
-            for (int i = 0; i < _tabs.Length && i < sim.Lines.Count; i++)
+            for (int i = 0; i < _tabs.Length; i++)
             {
                 bool active = i == _selected;
-                bool built = sim.Lines[i].Built;
+                bool built = i < sim.Lines.Count ? sim.Lines[i].Built : AnyAssemblyBuilt(sim);
+                Color tone = i < LineColors.Length ? LineColors[i] : new Color(0.95f, 0.58f, 0.72f);
                 Image image = _tabs[i].GetComponent<Image>();
-                image.color = active ? LineColors[i] : (built ? new Color(0.18f, 0.20f, 0.25f) : new Color(0.14f, 0.15f, 0.18f));
+                image.color = active ? tone : (built ? new Color(0.18f, 0.20f, 0.25f) : new Color(0.14f, 0.15f, 0.18f));
 
                 Text label = _tabs[i].GetComponentInChildren<Text>();
                 label.color = active ? new Color(0.07f, 0.08f, 0.10f) : (built ? TextColor : new Color(0.48f, 0.52f, 0.58f));
             }
         }
 
+        static bool AnyAssemblyBuilt(FactorySim sim)
+        {
+            for (int i = 0; i < sim.Assembly.Count; i++)
+                if (sim.Assembly[i].Built) return true;
+            return false;
+        }
+
+        // Карточки выбранной линии. Одна и та же тройка карточек просто
+        // перезаполняется данными — так проще, чем плодить 9 карточек.
         void UpdateMachines(FactorySim sim)
         {
             LineState line = sim.Lines[_selected];
@@ -894,8 +983,69 @@ namespace Game.Factory
             }
         }
 
+        // Карточки сборки. Логика один в один со станками, но рецепт у каждой свой.
+        void UpdateAssemblyCards(FactorySim sim)
+        {
+            for (int i = 0; i < _assemblyCards.Length && i < sim.Assembly.Count; i++)
+            {
+                AssemblyLine a = sim.Assembly[i];
+                Card card = _assemblyCards[i];
+
+                card.Level.text = a.Built ? "Lv " + a.Level : "—";
+                card.Power.text = a.Built ? "Мощность: " + a.EnergyDraw + " ед." : "";
+
+                if (!a.Built)
+                {
+                    card.Stats.text = RecipeLine(a.Recipe) + "\nЦена $" + sim.AssemblyPrice(i) +
+                                      " · " + a.CraftTime.ToString("0.0") + "с";
+                    string reason;
+                    SetButton(card, CanBuildAssembly(sim, i, out reason), reason);
+                    continue;
+                }
+
+                card.Stats.text = RecipeLine(a.Recipe) + "\n" +
+                                  "Склад " + a.Output + "/" + AssemblyLine.Cap + " · Сделано " + a.Produced +
+                                  " · $" + sim.AssemblyPrice(i);
+                // что уже лежит на верстаке под текущий заказ
+                card.Power.text = "Детали: " + a.Hopper[0] + " + " + a.Hopper[1];
+
+                string why;
+                SetButton(card, CanUpgradeAssembly(sim, i, out why), why);
+            }
+        }
+
+        static string RecipeLine(Recipe recipe)
+        {
+            return recipe.AN + " " + Recipes.PartName(recipe.A) + " + " +
+                   recipe.BN + " " + Recipes.PartName(recipe.B) + " → " + recipe.Name.ToUpper();
+        }
+
+        bool CanBuildAssembly(FactorySim sim, int index, out string reason)
+        {
+            AssemblyLine a = sim.Assembly[index];
+            if (sim.Money + 0.001f < a.BuildCost) { reason = "НУЖНО $" + a.BuildCost; return false; }
+            if (sim.EnergyUsed + a.EnergyDraw > sim.EnergyCapacity) { reason = "НЕТ ЭНЕРГИИ"; return false; }
+
+            reason = "ПОСТРОИТЬ $" + a.BuildCost;
+            return true;
+        }
+
+        bool CanUpgradeAssembly(FactorySim sim, int index, out string reason)
+        {
+            AssemblyLine a = sim.Assembly[index];
+            if (a.Level >= FactorySim.MaxLevel) { reason = "МАКС. УРОВЕНЬ"; return false; }
+            if (sim.Money + 0.001f < a.UpgradeCost) { reason = "НУЖНО $" + a.UpgradeCost; return false; }
+            if (sim.EnergyUsed - a.EnergyDraw + a.NextEnergyDraw > sim.EnergyCapacity) { reason = "НЕТ ЭНЕРГИИ"; return false; }
+
+            reason = "УЛУЧШИТЬ $" + a.UpgradeCost;
+            return true;
+        }
+
         void UpdateBuild(FactorySim sim)
         {
+            // Ищем, что вообще можно построить: сначала текущую вкладку,
+            // иначе первую свободную линию. _buildTarget запоминаем, потому что
+            // кнопка лежит ниже и на момент клика _selected уже может быть другим.
             int target = -1;
             if (!sim.Lines[_selected].Built) target = _selected;
             else
@@ -908,6 +1058,7 @@ namespace Game.Factory
 
             if (target < 0)
             {
+                _buildTarget = -1;
                 _build.Title.text = "ВСЕ ЛИНИИ ПОСТРОЕНЫ";
                 _build.Level.text = "";
                 _build.Stats.text = "Свободных мест на полу больше нет";
@@ -917,6 +1068,7 @@ namespace Game.Factory
             }
 
             LineState line = sim.Lines[target];
+            _buildTarget = target;
             _build.Button.gameObject.SetActive(true);
             _build.Title.text = "ЛИНИЯ «" + line.Name.ToUpper() + "»";
             _build.Level.text = "";
@@ -955,6 +1107,8 @@ namespace Game.Factory
             return true;
         }
 
+        // Общая функция для кнопок: выключенная кнопка серая и не нажимается.
+        // Цвета берём из акцента карточки, чтобы всё выглядело в одном стиле.
         void SetButton(Card card, bool enabled, string label)
         {
             card.Button.interactable = enabled;
@@ -971,6 +1125,7 @@ namespace Game.Factory
 
         void UpdateTable(FactorySim sim)
         {
+            // Таблица обновляется только когда открыта — незачем тратить кадры.
             if (!_table.activeSelf) return;
 
             var journal = new System.Text.StringBuilder();
@@ -982,7 +1137,9 @@ namespace Game.Factory
             }
             _journal.text = journal.ToString();
 
-            for (int i = 0; i < _rows.Length && i < sim.Lines.Count; i++)
+            // Отдельная таблица на 6 строк: 3 линии + 3 сборки.
+            // Шапка и строки позиционируются вручную, автоматического лэйаута тут нет.
+            for (int i = 0; i < _rows.Length && i < ProductInfo.Count && i < sim.Lines.Count; i++)
             {
                 LineState line = sim.Lines[i];
                 Row row = _rows[i];
@@ -1019,10 +1176,49 @@ namespace Game.Factory
                 }
             }
 
+            // строки сборок идут сразу после линий
+            for (int i = 0; i < sim.Assembly.Count; i++)
+            {
+                AssemblyLine a = sim.Assembly[i];
+                Row row = _rows[ProductInfo.Count + i];
+
+                row.Line.text = a.Built ? a.Name + " · сборка" : a.Name + " · нет";
+                row.Line.color = a.Built ? new Color(0.95f, 0.58f, 0.72f) : new Color(0.52f, 0.56f, 0.63f);
+                row.Materials.text = a.Built ? a.Hopper[0] + " / " + a.Recipe.AN + " · " + a.Hopper[1] + " / " + a.Recipe.BN : "—";
+                row.Products.text = a.Built ? a.Output + " / " + AssemblyLine.Cap : "—";
+                row.Levels.text = a.Built ? "Сб " + a.Level + " · Сделано " + a.Produced : "—";
+                row.Price.text = "$" + sim.AssemblyPrice(i);
+
+                if (!a.Built)
+                {
+                    row.Status.text = "НЕ ПОСТРОЕНА";
+                    row.Status.color = new Color(0.55f, 0.58f, 0.64f);
+                }
+                else if (!sim.EnergyOk)
+                {
+                    row.Status.text = "НЕТ ЭНЕРГИИ";
+                    row.Status.color = new Color(1f, 0.45f, 0.42f);
+                }
+                else if (!sim.ShiftActive)
+                {
+                    row.Status.text = sim.Skipped ? "ПРОПУСК" : "ПЕРЕРЫВ";
+                    row.Status.color = new Color(0.92f, 0.80f, 0.45f);
+                }
+                else
+                {
+                    row.Status.text = a.Status;
+                    row.Status.color = new Color(0.60f, 0.90f, 0.62f);
+                }
+            }
+
             _tableTotals.text =
                 "Куплено " + sim.TotalBought + " мат. · Произведено " + sim.TotalProduced + " шт. · Продано " + sim.TotalSold + " шт.\n" +
                 "Выручка $" + Mathf.FloorToInt(sim.TotalRevenue) + " · Расходы $" + Mathf.FloorToInt(sim.TotalSpent) +
-                " · Субсидии $" + Mathf.FloorToInt(sim.TotalSubsidy) + " · Энергия " + sim.EnergyUsed + "/" + sim.EnergyCapacity;
+                " · Субсидии $" + Mathf.FloorToInt(sim.TotalSubsidy) + " · Энергия " + sim.EnergyUsed + "/" + sim.EnergyCapacity + "\n" +
+                "Деталей: " + sim.Lines[0].Produced + " шест. · " + sim.Lines[1].Produced + " корп. · " +
+                sim.Lines[2].Produced + " микр.\n" +
+                "Собрано: " + sim.Assembly[0].Produced + " ред. · " + sim.Assembly[1].Produced + " прив. · " +
+                sim.Assembly[2].Produced + " турб.";
         }
 
         static string RowState(LineState line)
@@ -1032,6 +1228,8 @@ namespace Game.Factory
             return "РАБОТА";
         }
 
+        // Вспомогательные штуки для ручной вёрстки.
+        // NewRect/AddImage/NewText — это просто сахар, чтобы Build не превращался в 500 строк.
         static RectTransform NewRect(Transform parent, string name)
         {
             var go = new GameObject(name, typeof(RectTransform));
@@ -1081,6 +1279,9 @@ namespace Game.Factory
             return button;
         }
 
+        // SetRect ставит якоря и размеры сразу. Порядок аргументов:
+        // позиция, размер, anchorMin, anchorMax. Pivot всегда = anchorMin,
+        // иначе элементы уезжают (проверено на практике).
         static void SetRect(RectTransform rect, Vector2 position, Vector2 size, Vector2 anchorMin, Vector2 anchorMax)
         {
             rect.anchorMin = anchorMin;

@@ -4,6 +4,9 @@ using UnityEngine;
 
 namespace Game.EditorTools
 {
+    // Одноразовая настройка сцены: создать пустую сцену, повесить FactoryGame,
+    // сохранить в Assets/Scenes/Factory.unity и добавить в Build Settings.
+    // Запускается из меню Factory/Setup Scene.
     public static class FactorySetup
     {
         public const string ScenePath = "Assets/Scenes/Factory.unity";

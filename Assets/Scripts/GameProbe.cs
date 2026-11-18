@@ -1,9 +1,9 @@
-// Automated play-test probe for the OpenCode unity-game-dev skill.
-// Installs into <project>/Assets/Scripts/GameProbe.cs (part of the Game.Runtime assembly).
+// Служебный «пробник» для автотестов: запускается с ключом -probe,
+// делает скриншоты, собирает ошибки и метрики, пишет report.json.
+// В обычной игре не активен, на производительность не влияет.
 //
-// Run a build with:  MyGame.exe -probe -probe-seconds 15 -probe-out TestArtifacts/probe
-// The probe captures screenshots, collects errors/metrics and writes report.json.
-// From game code call: GameProbe.Metric("score", value); GameProbe.Check("player alive", condition);
+// Пример запуска:  Factory Prototype.exe -probe -probe-seconds 15 -probe-out TestArtifacts/probe
+// Из игрового кода: GameProbe.Metric("money", Sim.Money); GameProbe.Check("жив", true);
 
 using System;
 using System.Collections;
@@ -53,6 +53,8 @@ namespace Game
             go.AddComponent<GameProbe>();
         }
 
+        // -probe-seconds — сколько всего крутиться, -probe-interval — как часто снимать кадр.
+        // -probe-width/-probe-height задают окно (только для билда), -probe-noquit оставляет игру открытой.
         void Awake()
         {
             if (Instance != null && Instance != this) { Destroy(gameObject); return; }
@@ -103,6 +105,8 @@ namespace Game
             if (_elapsed > 0.5f && fps < _minFps) _minFps = fps;
         }
 
+        // Основной цикл: стартовый кадр, потом кадры раз в interval, в конце отчёт.
+        // Ждём реальное время, чтобы работало и на ускоренном Time.timeScale.
         IEnumerator Run()
         {
             yield return new WaitForSecondsRealtime(0.75f);
@@ -134,6 +138,8 @@ namespace Game
             }
         }
 
+        // Скриншот пишется асинхронно, поэтому ждём появления файла,
+        // а не просто делаем yield return null. На медленном диске бывает долго.
         IEnumerator Capture(string label)
         {
             string file = Path.Combine(_outDir, string.Format("shot-{0:00}-{1}.png", _screenshotIndex++, label));
