@@ -446,13 +446,15 @@ namespace Game.Factory
             _hintTitle.fontStyle = FontStyle.Bold;
 
             // Кнопка закрытия/скрытия совета
-            Button closeBtn = NewButton(rect, "CloseAdviceBtn", "✕", TextMuted, 12, null);
+            Button closeBtn = NewButton(rect, "CloseAdviceBtn", "✕", TextMuted, 11, null);
             RectTransform closeRect = closeBtn.GetComponent<RectTransform>();
             closeRect.anchorMin = new Vector2(1f, 1f);
             closeRect.anchorMax = new Vector2(1f, 1f);
             closeRect.pivot = new Vector2(1f, 1f);
-            closeRect.anchoredPosition = new Vector2(-8f, -8f);
-            closeRect.sizeDelta = new Vector2(24f, 24f);
+            closeRect.anchoredPosition = new Vector2(-10f, -10f);
+            closeRect.sizeDelta = new Vector2(22f, 22f);
+            Image closeImg = closeBtn.GetComponent<Image>();
+            closeImg.color = new Color(0.12f, 0.16f, 0.19f, 0.9f);
             closeBtn.onClick.AddListener(delegate { SetAdviceVisible(false); });
 
             _hintText = NewText(rect, "AdviceBody", "", 12, TextMuted, TextAnchor.UpperLeft);
@@ -485,9 +487,9 @@ namespace Game.Factory
             _sidebarPanel = NewRect(root, "SidebarPanel");
             _sidebarPanel.anchorMin = new Vector2(1f, 0f);
             _sidebarPanel.anchorMax = new Vector2(1f, 1f);
-            _sidebarPanel.pivot = new Vector2(1f, 0.5f);
-            _sidebarPanel.anchoredPosition = new Vector2(-20f, -6f);
-            _sidebarPanel.sizeDelta = new Vector2(SidebarWidth, -84f);
+            _sidebarPanel.pivot = new Vector2(1f, 1f);
+            _sidebarPanel.anchoredPosition = new Vector2(-20f, -74f);
+            _sidebarPanel.sizeDelta = new Vector2(SidebarWidth, -94f);
             AddSlicedImage(_sidebarPanel, _sprSidebarBg);
 
             _sidebarCurrentX = -20f;
@@ -562,7 +564,7 @@ namespace Game.Factory
         public void ToggleSidebar()
         {
             _sidebarCollapsed = !_sidebarCollapsed;
-            _sidebarTargetX = _sidebarCollapsed ? (SidebarWidth + 10f) : -20f;
+            _sidebarTargetX = _sidebarCollapsed ? (SidebarWidth - 4f) : -20f;
         }
 
         void BuildTabs(RectTransform parent)
@@ -858,7 +860,7 @@ namespace Game.Factory
             if (Mathf.Abs(_sidebarCurrentX - _sidebarTargetX) > 0.1f)
             {
                 _sidebarCurrentX = Mathf.Lerp(_sidebarCurrentX, _sidebarTargetX, Time.unscaledDeltaTime * 14f);
-                _sidebarPanel.anchoredPosition = new Vector2(_sidebarCurrentX, _sidebarPanel.anchoredPosition.y);
+                _sidebarPanel.anchoredPosition = new Vector2(_sidebarCurrentX, -74f);
             }
 
             if (_sidebarToggleArrow != null)
@@ -1431,8 +1433,12 @@ namespace Game.Factory
             {
                 image.sprite = background;
                 image.type = Image.Type.Sliced;
+                image.color = Color.white;
             }
-            image.color = Color.white;
+            else
+            {
+                image.color = Color.clear;
+            }
             image.raycastTarget = true;
 
             Button button = rect.gameObject.AddComponent<Button>();
