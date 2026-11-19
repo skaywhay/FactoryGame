@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace Game.Factory
 {
@@ -48,11 +49,35 @@ namespace Game.Factory
             if (Sim == null || _hall == null || _hud == null) EnsureInitialized();
             if (Sim == null) return;
 
+            // Пробел — быстрая пауза. В обучении игра тоже стоит,
+            // иначе смена заканчивается, пока читаешь подсказки.
+            if (Input.GetKeyDown(KeyCode.Space)) Sim.Paused = !Sim.Paused;
+
+            bool paused = Sim.Paused || _hud.TutorialOpen;
+
             float dt = Time.deltaTime;
-            Sim.Tick(dt);
-            UpdateHall(dt);
+            if (!paused) Sim.Tick(dt);
+            UpdateHall(paused ? 0f : dt);
             _hud.Tick();
-            UpdateProbe(dt);
+            HandleClicks();
+            UpdateProbe(Time.deltaTime);
+        }
+
+        // Клик по красной бракованной детали в 3D-зале.
+        // Кнопка в HUD делает то же самое — кому как удобнее.
+        void HandleClicks()
+        {
+            if (Sim.Paused || _hud.TutorialOpen) return;
+            if (!Input.GetMouseButtonDown(0)) return;
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return;
+            if (_hall == null || _hall.Camera == null) return;
+
+            Ray ray = _hall.Camera.ScreenPointToRay(Input.mousePosition);
+            RaycastHit hit;
+            if (!Physics.Raycast(ray, out hit, 200f)) return;
+
+            DefectMarker marker = hit.collider.GetComponentInParent<DefectMarker>();
+            if (marker != null) Sim.FixDefect(marker.Line);
         }
 
         public void UpgradeMachine(int line, MachineKind kind)
@@ -170,6 +195,24 @@ namespace Game.Factory
 
                     Face(view.Sign.Title);
                     Face(view.Sign.Info);
+                }
+
+                if (view.Defect != null)
+                {
+                    bool show = line.Built && line.Defect;
+                    if (view.Defect.activeSelf != show) view.Defect.SetActive(show);
+
+                    if (show)
+                    {
+                        // Крутим красный кубик, чтобы он цеплял взгляд.
+                        view.Defect.transform.Rotate(0f, 90f * dt, 0f, Space.Self);
+
+                        if (view.DefectLabel != null)
+                        {
+                            view.DefectLabel.text = "БРАК · " + Mathf.CeilToInt(line.DefectLeft) + "с";
+                            Face(view.DefectLabel);
+                        }
+                    }
                 }
 
                 if (!line.Built) continue;
@@ -325,6 +368,8 @@ namespace Game.Factory
             GameProbe.Metric("totalSold", Sim.TotalSold);
             GameProbe.Metric("planDone", Sim.PlanDoneCount);
             GameProbe.Metric("planCount", Sim.Plan.Count);
+            GameProbe.Metric("defectsCaught", Sim.DefectsCaught);
+            GameProbe.Metric("defectsMissed", Sim.DefectsMissed);
 
             if (_probeDone) return;
             _probeDone = true;

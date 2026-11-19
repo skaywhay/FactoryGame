@@ -38,3 +38,22 @@
 # OS generated
 .DS_Store
 Thumbs.db
+
+# --- Сгенерировано AI-инструментами (OpenCode / unity-game-dev) ---
+# Мост редактора и вспомогательные editor-скрипты
+/Assets/Editor/AIUnity/
+/Assets/Editor/AIUnity.meta
+/Assets/Editor/TestRun.cs
+/Assets/Editor/TestRun.cs.meta
+
+# Автотесты и пробник для playtest
+/Assets/Tests/
+/Assets/Tests.meta
+/Assets/Scripts/GameProbe.cs
+/Assets/Scripts/GameProbe.cs.meta
+
+# Артефакты прогонов и сборок
+/TestArtifacts/
+/Backup/
+/Builds.zip
+

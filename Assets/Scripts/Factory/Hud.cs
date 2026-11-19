@@ -52,6 +52,13 @@ namespace Game.Factory
         Text _upkeep;
         Text _planDetail;
 
+        // Пауза и брак
+        Button _pauseButton;
+        Text _pauseButtonLabel;
+        Button _defectButton;
+        Text _defectButtonLabel;
+        int _defectLine = -1;
+
         // Sidebar & Dynamic Navigation
         RectTransform _sidebarPanel;
         RectTransform _sidebarToggleArrow;
@@ -360,6 +367,12 @@ namespace Game.Factory
             SetRect(tutorial.GetComponent<RectTransform>(), new Vector2(-198f, 0f), new Vector2(90f, 32f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
             tutorial.onClick.AddListener(ToggleTutorial);
             _tutorialButtonLabel = tutorial.GetComponentInChildren<Text>();
+
+            // Пауза. Специально рядом с таблицей и обучением — игрок ищет её там же.
+            _pauseButton = NewButton(bar, "Pause", "ПАУЗА", Color.white, 12, _sprBtnNeutral);
+            SetRect(_pauseButton.GetComponent<RectTransform>(), new Vector2(-290f, 0f), new Vector2(82f, 32f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
+            _pauseButton.onClick.AddListener(TogglePause);
+            _pauseButtonLabel = _pauseButton.GetComponentInChildren<Text>();
         }
 
         void AddDivider(RectTransform parent, ref float curX)
@@ -405,6 +418,15 @@ namespace Game.Factory
             _planDetail.rectTransform.anchorMax = Vector2.one;
             _planDetail.rectTransform.sizeDelta = Vector2.zero;
             _planDetail.rectTransform.anchoredPosition = Vector2.zero;
+
+            // Красная плашка брака. Висит под планом, пока деталь не убрали.
+            // Сделал кнопкой: клик по ней = клик по детали в зале.
+            _defectButton = NewButton(root, "DefectBanner", "", Color.white, 13, _sprBtnRed);
+            SetRect(_defectButton.GetComponent<RectTransform>(), new Vector2(0f, -104f), new Vector2(560f, 30f),
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+            _defectButton.onClick.AddListener(OnDefectClicked);
+            _defectButtonLabel = _defectButton.GetComponentInChildren<Text>();
+            _defectButton.gameObject.SetActive(false);
         }
 
         void BuildHintCard(RectTransform root)
@@ -791,6 +813,21 @@ namespace Game.Factory
         }
 
         // ------------------------------------------------------------- Logic & Updates
+        public bool TutorialOpen
+        {
+            get { return _tutorial != null && _tutorial.activeSelf; }
+        }
+
+        public void TogglePause()
+        {
+            if (_game.Sim != null) _game.Sim.Paused = !_game.Sim.Paused;
+        }
+
+        void OnDefectClicked()
+        {
+            if (_defectLine >= 0) _game.Sim.FixDefect(_defectLine);
+        }
+
         public void ToggleTutorial()
         {
             bool open = !_tutorial.activeSelf;
@@ -836,7 +873,12 @@ namespace Game.Factory
             _money.text = "$ " + Mathf.FloorToInt(sim.Money);
             _day.text = "ДЕНЬ " + sim.Day + (sim.Strikes > 0 ? " • ✕" + sim.Strikes : "");
             _day.color = sim.Strikes > 0 ? AccentRed : TextWhite;
-            _phase.text = sim.PhaseText;
+            bool paused = sim.Paused || TutorialOpen;
+            _phase.text = paused ? "ПАУЗА" : sim.PhaseText;
+            _phase.color = paused ? AccentAmber : TextMuted;
+
+            if (_pauseButtonLabel != null)
+                _pauseButtonLabel.text = sim.Paused ? "ПРОДОЛЖИТЬ" : "ПАУЗА";
 
             bool planMet = sim.PlanComplete;
             _plan.text = "ПЛАН " + sim.PlanDoneCount + "/" + sim.Plan.Count;
@@ -860,6 +902,28 @@ namespace Game.Factory
 
             _planDetail.text = "ПЛАН ДНЯ: " + sim.PlanText();
             _planDetail.color = planMet ? AccentGreen : new Color(0.56f, 0.81f, 1f);
+
+            // Ищем активный брак (он всегда один) и показываем красную кнопку.
+            _defectLine = -1;
+            for (int i = 0; i < sim.Lines.Count; i++)
+            {
+                if (!sim.Lines[i].Defect) continue;
+                _defectLine = i;
+                break;
+            }
+
+            if (_defectButton != null)
+            {
+                bool show = _defectLine >= 0;
+                if (_defectButton.gameObject.activeSelf != show) _defectButton.gameObject.SetActive(show);
+
+                if (show && _defectButtonLabel != null)
+                {
+                    LineState bad = sim.Lines[_defectLine];
+                    _defectButtonLabel.text = "БРАК: " + bad.Name.ToUpper() + " · " +
+                                               Mathf.CeilToInt(bad.DefectLeft) + "с · УБРАТЬ";
+                }
+            }
 
             bool energyOk = sim.EnergyOk;
             _energy.text = "ЭНЕРГИЯ " + sim.EnergyUsed + " / " + sim.EnergyCapacity;
@@ -1283,7 +1347,7 @@ namespace Game.Factory
                     _tutorialPoint2Title.text = "2. Производитель";
                     _tutorialPoint2Desc.text = "Берёт сырьё со склада и изготавливает готовую деталь. Тратит фиксированное время.";
                     _tutorialPoint3Title.text = "3. Продавец";
-                    _tutorialPoint3Desc.text = "Отгружает готовую продукцию заказчикам. Каждый уровень повышает цену продажи на +$3.";
+                    _tutorialPoint3Desc.text = "Отгружает готовую продукцию заказчикам. Каждый уровень повышает цену продажи на +$3. Иногда на складе появляется красная бракованная деталь — успейте кликнуть по ней за 12 секунд.";
                     _tutorialTipText.text = "Совет: держите баланс между станками, чтобы склады не забивались и не простаивали.";
                     break;
                 case 1:
@@ -1312,11 +1376,11 @@ namespace Game.Factory
                     _tutorialStepTitle.text = "ПЛАН ДНЯ И СУБСИДИИ";
                     _tutorialSubTitle.text = "Правила смены и выживания директора завода";
                     _tutorialPoint1Title.text = "1. Смена и таймер";
-                    _tutorialPoint1Desc.text = "Длительность рабочего дня составляет 40 секунд. За это время нужно успеть отгрузить план.";
+                    _tutorialPoint1Desc.text = "Длительность рабочего дня составляет 40 секунд. Если нужно отойти или дочитать обучение — нажмите «ПАУЗА» вверху (или пробел).";
                     _tutorialPoint2Title.text = "2. Награда за план";
                     _tutorialPoint2Desc.text = "Выполнение всех позиций плана приносит крупную субсидию в бюджет фабрики.";
                     _tutorialPoint3Title.text = "3. Страйки и банкротство";
-                    _tutorialPoint3Desc.text = "Провал плана даёт страйк (✕). Три страйка приводят к немедленному увольнению директора.";
+                    _tutorialPoint3Desc.text = "Провал плана даёт страйк (✕). Три страйка приводят к немедленному увольнению директора. Брак страйков не даёт — он просто съедает один товар.";
                     _tutorialTipText.text = "Совет: если смена подходит к концу, сфокусируйтесь на улучшении отстающего станка!";
                     break;
             }

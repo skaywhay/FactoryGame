@@ -23,6 +23,17 @@ namespace Game.Factory
         public Transform Empty;
         public Station Sign;
         public Station[] Stations;
+
+        // Красная бракованная деталь над складом. Видна только когда Defect активен.
+        public GameObject Defect;
+        public TextMesh DefectLabel;
+    }
+
+    // Метка бракованной детали. Она нужна, чтобы по клику из зала
+    // понять, на какую линию жалуется игрок.
+    public class DefectMarker : MonoBehaviour
+    {
+        public int Line;
     }
 
     public class HallRefs
@@ -404,7 +415,33 @@ namespace Game.Factory
             CreateBay(empty.transform, tone, 0.14f, true);
 
             view.Sign = CreateSign(root, index, z);
+            CreateDefectMarker(row.transform, view, index);
             return view;
+        }
+
+        // Красная деталь над продавцом. Сделана из кубика, чтобы её было видно
+        // даже боковым зрением, и оставил коллайдер — по нему ловим клик.
+        static void CreateDefectMarker(Transform parent, LineView view, int index)
+        {
+            var marker = new GameObject("Defect " + (index + 1));
+            marker.transform.SetParent(parent, false);
+            marker.transform.localPosition = new Vector3(5.3f, 2.35f, 0.55f);
+
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = "Bad Part";
+            cube.transform.SetParent(marker.transform, false);
+            cube.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
+            cube.GetComponent<Renderer>().sharedMaterial = Solid("Defect Red " + index,
+                new Color(0.93f, 0.12f, 0.12f), 0.45f);
+
+            // Коллайдер кубика НЕ удаляем: FactoryGame делает по нему Raycast.
+            marker.AddComponent<DefectMarker>().Line = index;
+
+            view.DefectLabel = MakeLabel(marker.transform, "БРАК", new Vector3(0f, 0.78f, 0f),
+                new Color(1f, 0.55f, 0.5f), 0.07f);
+
+            marker.SetActive(false);
+            view.Defect = marker;
         }
 
         static Station CreateSign(Transform root, int index, float z)

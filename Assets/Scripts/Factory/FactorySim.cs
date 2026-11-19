@@ -152,6 +152,27 @@ namespace Game.Factory
         public float NextDayTimer;
         public int PendingUpkeep;
 
+        // Пауза. Смену можно остановить кнопкой вверху или пробелом,
+        // а ещё игра сама встаёт, пока открыто обучение.
+        public bool Paused;
+
+        // Брак на конвейере. Красная деталь висит на складе линии,
+        // её надо успеть убрать кликом. 12 секунд — это нормально:
+        // можно отвлечься на карточку, но и не «пропустил за 2 секунды».
+        public const float DefectTime = 12f;
+        public const int DefectsPerShift = 2;
+
+        // Сколько секунд осталось до следующего брака.
+        // Ставим 16-26 секунд, за 40-секундную смену выходит 1-2 штуки.
+        public float DefectSpawnTimer;
+
+        public int DefectsThisShift;
+        public int DefectsCaught;
+        public int DefectsMissed;
+
+        // Свой рандом, чтобы не тащить UnityEngine в чистую симуляцию.
+        readonly Random _rng = new Random();
+
         // Три провала плана — и всё, завод закрывается. Меньше двух было слишком строго,
         // больше четырёх — никто уже не боится.
         public int Strikes;
@@ -252,23 +273,33 @@ namespace Game.Factory
         }
 
         // Дневные нормы. Колонки: шестерёнки, корпуса, микросхемы, редукторы, приводы, турбины.
-        // Числа подбирал так, чтобы первые дни спокойно закрывались одной-двумя линиями,
-        // а к 12-му дню пришлось реально прокачивать станки и строить сборку.
-        // Дальше 12-го дня таблица не кончается — план просто растёт на 8% в день.
+        //
+        // Считал от реальной скорости линий за 40-секундную смену:
+        //   шестерёнки: 25 шт на Lv1, 32 на Lv2, 39 на Lv3
+        //   корпуса:    12 на Lv1, 16 на Lv2, 19 на Lv3
+        //   микросхемы:  8 шт на Lv1, 11 на Lv2, 13 на Lv3
+        // План держу примерно на 70-85% этой ёмкости — остаётся запас на брак,
+        // нехватку сырья и обычную человеческую невнимательность.
+        //
+        // Важно: сборка съедает детали. На 2 редуктора нужно ещё 4 шестерёнки
+        // и 2 корпуса, а на привод — ещё редуктор и 2 микросхемы.
+        // Поэтому в дни со сборкой нормы по линиям чуть ниже.
+        //
+        // Дальше 12-го дня таблица не кончается — план растёт на 8% в день.
         static readonly int[,] PlanTable =
         {
-            { 15,  0,  0, 0, 0, 0 }, // 1 — только шестерёнки, знакомство
-            { 20,  0,  0, 0, 0, 0 }, // 2
-            { 24,  5,  0, 0, 0, 0 }, // 3 — самое время открыть корпуса
-            { 28,  9,  0, 0, 0, 0 }, // 4
-            { 32, 12,  0, 0, 0, 0 }, // 5
-            { 34, 15,  3, 0, 0, 0 }, // 6 — подключаются микросхемы
-            { 36, 18,  6, 0, 0, 0 }, // 7
-            { 39, 20,  9, 1, 0, 0 }, // 8 — первый редуктор
-            { 41, 21, 11, 2, 0, 0 }, // 9
-            { 42, 23, 13, 4, 1, 0 }, // 10 — первый привод
-            { 43, 25, 14, 5, 2, 0 }, // 11
-            { 44, 26, 15, 6, 4, 1 }, // 12 — турбина, дальше масштабируем
+            { 12,  0,  0, 0, 0, 0 }, // 1 — только шестерёнки, спокойное знакомство
+            { 15,  0,  0, 0, 0, 0 }, // 2
+            { 17,  4,  0, 0, 0, 0 }, // 3 — пора открывать корпуса
+            { 19,  6,  0, 0, 0, 0 }, // 4
+            { 21,  8,  0, 0, 0, 0 }, // 5 — тут уже хочется прокачать шестерёнки
+            { 23, 10,  0, 0, 0, 0 }, // 6
+            { 24, 11,  3, 0, 0, 0 }, // 7 — подключаются микросхемы
+            { 24, 11,  3, 1, 0, 0 }, // 8 — первый редуктор
+            { 25, 12,  4, 2, 0, 0 }, // 9
+            { 25, 13,  5, 2, 1, 0 }, // 10 — первый привод
+            { 26, 13,  6, 3, 2, 0 }, // 11
+            { 27, 12,  6, 3, 2, 1 }, // 12 — турбина, дальше масштабируем
         };
 
         // Премия растёт линейно, чтобы к поздним дням она всё ещё была заметной
@@ -411,7 +442,15 @@ namespace Game.Factory
             Premium = PlanPremium(Day);
             PendingUpkeep = TotalUpkeep;
 
-            // 
+            // Брак в новый день начинается с чистого листа.
+            // Первую красную деталь подкидываем не сразу, чтобы игрок успел втянуться.
+            DefectsThisShift = 0;
+            DefectSpawnTimer = _rng.Next(16, 26);
+            for (int i = 0; i < Lines.Count; i++)
+            {
+                Lines[i].Defect = false;
+                Lines[i].DefectLeft = 0f;
+            }
 
             for (int i = 0; i < ShiftMade.Length; i++) ShiftMade[i] = 0;
             for (int i = 0; i < ShiftMadeAssembly.Length; i++) ShiftMadeAssembly[i] = 0;
@@ -497,7 +536,8 @@ namespace Game.Factory
         // Если переставить местами — появятся странные скачки складов.
         public void Tick(float dt)
         {
-            if (dt <= 0f || GameOver) return;
+            // На паузе вообще ничего не считаем: ни деньги, ни таймеры, ни брак.
+            if (dt <= 0f || GameOver || Paused) return;
 
             if (!ShiftActive)
             {
@@ -515,6 +555,10 @@ namespace Game.Factory
                 EndDay();
                 return;
             }
+
+            // Брак проверяем после таймера смены, но до станков:
+            // если деталь уже испортилась, она должна исчезнуть со склада в этом же тике.
+            TickDefects(dt);
 
             bool energyOk = EnergyOk;
 
@@ -559,6 +603,109 @@ namespace Game.Factory
                     }
                 }
             }
+        }
+
+        // Брак живёт своей жизнью: тикает, может испортиться и иногда появляется заново.
+        // Специально держим не больше одной красной детали сразу — иначе это уже не
+        // «занять паузу», а вторая работа.
+        void TickDefects(float dt)
+        {
+            bool active = false;
+
+            for (int i = 0; i < Lines.Count; i++)
+            {
+                LineState line = Lines[i];
+                if (!line.Defect) continue;
+
+                line.DefectLeft -= dt;
+                if (line.DefectLeft > 0f)
+                {
+                    active = true;
+                    continue;
+                }
+
+                // Не успели убрать. Никаких страйков: просто минус один готовый товар.
+                // Если склад и так пустой, считаем, что обошлось.
+                line.Defect = false;
+                line.DefectLeft = 0f;
+                DefectsMissed++;
+
+                if (line.Products > 0)
+                {
+                    line.Products--;
+                    SetEvent("Брак на «" + line.Name + "» уехал в партию · −1 товар", EventTone.Bad);
+                }
+                else
+                {
+                    SetEvent("Брак на «" + line.Name + "» уехал в партию, но склад был пуст", EventTone.Info);
+                }
+            }
+
+            if (active) return;
+            if (DefectsThisShift >= DefectsPerShift) return;
+
+            DefectSpawnTimer -= dt;
+            if (DefectSpawnTimer > 0f) return;
+
+            SpawnRandomDefect();
+        }
+
+        void SpawnRandomDefect()
+        {
+            // Ищем линии, где есть куда класть брак.
+            // Проще собрать индексы в список, чем изобретать выбор без повторов.
+            var candidates = new List<int>();
+            for (int i = 0; i < Lines.Count; i++)
+                if (Lines[i].Built) candidates.Add(i);
+
+            if (candidates.Count == 0)
+            {
+                DefectSpawnTimer = 5f;
+                return;
+            }
+
+            int index = candidates[_rng.Next(candidates.Count)];
+            SpawnDefect(index);
+        }
+
+        // Публичная версия нужна тестам и отладке: поставить брак на конкретную линию.
+        public bool SpawnDefect(int index)
+        {
+            if (index < 0 || index >= Lines.Count) return false;
+
+            LineState line = Lines[index];
+            if (!line.Built) return false;
+            if (line.Defect) return false;
+            if (!ShiftActive) return false;
+
+            line.Defect = true;
+            line.DefectLeft = DefectTime;
+            DefectsThisShift++;
+            DefectSpawnTimer = _rng.Next(18, 29);
+            SetEvent("Брак на «" + line.Name + "»! Успейте убрать за " + (int)DefectTime + "с", EventTone.Bad);
+            return true;
+        }
+
+        // Игрок кликнул по красной детали (в зале или по кнопке вверху).
+        // Награда крошечная, чтобы не было смысла специально ждать брак.
+        public bool FixDefect(int index)
+        {
+            if (index < 0 || index >= Lines.Count) return false;
+
+            LineState line = Lines[index];
+            if (!line.Defect) return false;
+
+            line.Defect = false;
+            line.DefectLeft = 0f;
+            DefectsCaught++;
+            const int reward = 5;
+
+            Money += reward;
+            TotalRevenue += reward;
+            ShiftRevenue += reward;
+            TotalBonus += reward;
+            SetEvent("Брак на «" + line.Name + "» убран · +$" + reward, EventTone.Good);
+            return true;
         }
 
         // Закупщик берёт партию по 2 штуки, чтобы не тратить деньги каждый кадр.
@@ -888,6 +1035,11 @@ namespace Game.Factory
         public int Materials;  // сырьё на складе
         public int Products;   // готовая продукция на складе
         public int Produced;   // всего сделано за игру, для статистики
+
+        // Брак на складе: если не убрать за DefectTime секунд,
+        // он испортит одну готовую деталь.
+        public bool Defect;
+        public float DefectLeft;
 
         public readonly MachineState Buyer;
         public readonly MachineState Producer;
