@@ -577,10 +577,15 @@ namespace Game.Factory
             tabContainer.sizeDelta = new Vector2(-28f, 38f);
             AddSlicedImage(tabContainer, _sprTabContainerBg);
 
+            HorizontalLayoutGroup layout = tabContainer.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(4, 4, 3, 3);
+            layout.spacing = 4f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = true;
+
             _tabs = new Button[ProductInfo.Count + 1];
-            float tabWidth = 74f;
-            float startX = 4f;
-            float gap = 4f;
 
             for (int i = 0; i < _tabs.Length; i++)
             {
@@ -590,12 +595,9 @@ namespace Game.Factory
                     : "СБОРКА";
 
                 Button tab = NewButton(tabContainer, "Tab " + i, label, Color.white, 12, null);
-                RectTransform rect = tab.GetComponent<RectTransform>();
-                rect.anchorMin = new Vector2(0f, 0.5f);
-                rect.anchorMax = new Vector2(0f, 0.5f);
-                rect.pivot = new Vector2(0f, 0.5f);
-                rect.anchoredPosition = new Vector2(startX + i * (tabWidth + gap), 0f);
-                rect.sizeDelta = new Vector2(tabWidth, 32f);
+                Image tabImg = tab.GetComponent<Image>();
+                tabImg.type = Image.Type.Sliced;
+
                 tab.onClick.AddListener(delegate { _selected = index; });
                 _tabs[i] = tab;
             }
@@ -975,18 +977,22 @@ namespace Game.Factory
                 bool active = i == _selected;
                 Image tabImg = _tabs[i].GetComponent<Image>();
                 tabImg.sprite = active ? _sprTabActive : null;
+                tabImg.type = Image.Type.Sliced;
                 tabImg.color = active ? Color.white : Color.clear;
 
                 Text label = _tabs[i].GetComponentInChildren<Text>();
-                if (active)
+                if (label != null)
                 {
-                    label.color = (i == _tabs.Length - 1) ? AccentPink : TextWhite;
-                    label.fontStyle = FontStyle.Bold;
-                }
-                else
-                {
-                    label.color = (i == _tabs.Length - 1) ? new Color(0.85f, 0.50f, 0.65f) : TextMuted;
-                    label.fontStyle = FontStyle.Normal;
+                    if (active)
+                    {
+                        label.color = TextWhite;
+                        label.fontStyle = FontStyle.Bold;
+                    }
+                    else
+                    {
+                        label.color = TextMuted;
+                        label.fontStyle = FontStyle.Normal;
+                    }
                 }
             }
         }

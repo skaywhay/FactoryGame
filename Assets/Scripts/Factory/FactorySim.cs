@@ -63,10 +63,10 @@ namespace Game.Factory
 
         public static string ShortName(ProductKind kind)
         {
-            // Короткие подписи для вкладок и таблицы. Длинные там не влезают.
+            // Короткие подписи для вкладок и таблицы.
             switch (kind)
             {
-                case ProductKind.Gear: return "ШЕСТ.";
+                case ProductKind.Gear: return "ШЕСТ";
                 case ProductKind.Case: return "КОРПУС";
                 default: return "МИКРО";
             }
