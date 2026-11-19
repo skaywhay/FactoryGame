@@ -12,8 +12,6 @@ namespace Game.Factory
 
         HallRefs _hall;
         Hud _hud;
-        float _probeTimer = 3f;
-        bool _probeDone;
 
         void Awake()
         {
@@ -60,7 +58,6 @@ namespace Game.Factory
             UpdateHall(paused ? 0f : dt);
             _hud.Tick();
             HandleClicks();
-            UpdateProbe(Time.deltaTime);
         }
 
         // Клик по красной бракованной детали в 3D-зале.
@@ -349,37 +346,6 @@ namespace Game.Factory
             if (label == null || _hall.Camera == null) return;
             Vector3 d = label.transform.position - _hall.Camera.transform.position;
             label.transform.rotation = Quaternion.LookRotation(d, Vector3.up);
-        }
-
-        // Раз в 2 секунды отдаём метрики пробнику. Это не игровая логика,
-        // а способ автоматически проверить, что в билде всё живо.
-        void UpdateProbe(float dt)
-        {
-            _probeTimer -= dt;
-            if (_probeTimer > 0f) return;
-            _probeTimer = 2f;
-
-            GameProbe.Metric("money", Sim.Money);
-            GameProbe.Metric("day", Sim.Day);
-            GameProbe.Metric("energyUsed", Sim.EnergyUsed);
-            GameProbe.Metric("energyCapacity", Sim.EnergyCapacity);
-            GameProbe.Metric("materials", Sim.TotalMaterials);
-            GameProbe.Metric("products", Sim.TotalProducts);
-            GameProbe.Metric("totalSold", Sim.TotalSold);
-            GameProbe.Metric("planDone", Sim.PlanDoneCount);
-            GameProbe.Metric("planCount", Sim.Plan.Count);
-            GameProbe.Metric("defectsCaught", Sim.DefectsCaught);
-            GameProbe.Metric("defectsMissed", Sim.DefectsMissed);
-
-            if (_probeDone) return;
-            _probeDone = true;
-
-            GameProbe.Check("hud created", _hud != null);
-            GameProbe.Check("energy within capacity", Sim.EnergyOk, Sim.EnergyUsed + " / " + Sim.EnergyCapacity);
-            GameProbe.Check("three lines", Sim.Lines.Count == 3);
-            GameProbe.Check("two generators", Sim.Generators.Count == 2);
-            GameProbe.Check("gear line built", Sim.Lines[0].Built);
-            GameProbe.Check("daily plan has parts", Sim.Plan.Count > 0);
         }
     }
 }
