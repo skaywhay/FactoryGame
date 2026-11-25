@@ -1413,27 +1413,30 @@ namespace Game.Factory
         }
 
         // Интро короткое: одно окно, без листания. Дальше игрок сразу
-        // делает четыре действия руками — это и есть обучение.
+        // делает пять действий руками — это и есть обучение.
         void SetTutorialStep(int step)
         {
             _tutorialStep = 0;
-            _tutorialStepBadge.text = "ОБУЧЕНИЕ · 1 МИНУТА";
+            _tutorialStepBadge.text = "ОБУЧЕНИЕ · МИНУТА ДВЕ";
             _tutorialPrev.gameObject.SetActive(false);
             _tutorialNextLabel.text = "ПОПРОБУЕМ";
 
-            _tutorialStepTitle.text = "ЧЕТЫРЕ ДЕЙСТВИЯ — И ВЫ ДИРЕКТОР";
-            _tutorialSubTitle.text = "Сначала короткое объяснение, потом практика на живом заводе. Смена подождёт.";
+            _tutorialStepTitle.text = "ПРИВЕТ, НОВЫЙ СМЕННЫЙ";
+            _tutorialSubTitle.text = "Я покажу основы за пару минут. Потом — практика на живом заводе, смена не уйдёт.";
 
-            _tutorialPoint1Title.text = "1. Пауза";
-            _tutorialPoint1Desc.text = "Кнопка «ПАУЗА» вверху останавливает смену, пробел делает то же самое. Нажмите ещё раз, чтобы продолжить.";
+            _tutorialPoint1Title.text = "Пауза — твой лучший друг";
+            _tutorialPoint1Desc.text = "Кнопка «ПАУЗА» вверху (или пробел) останавливает смену. Нужно подумать, отвлечься, полить цветок — жми. Ещё раз — и завод снова работает.";
 
-            _tutorialPoint2Title.text = "2. Брак";
-            _tutorialPoint2Desc.text = "На складе иногда появляется красная деталь. Уберите её кликом — по детали в цехе или по красной плашке сверху. На это есть 12 секунд.";
+            _tutorialPoint2Title.text = "Брак не ждёт";
+            _tutorialPoint2Desc.text = "На складе иногда всплывает красная деталь. 12 секунд — и она испортит партию. Кликни по ней в цехе или по красной плашке сверху. Быстрее — лучше.";
 
-            _tutorialPoint3Title.text = "3. Развитие завода";
-            _tutorialPoint3Desc.text = "Карточки станков в сайдбаре: кнопка улучшения качает закупщика, производителя или продавца. Вкладка «СБОРКА» открывает сложные узлы из готовых деталей.";
+            _tutorialPoint3Title.text = "Станки растут — завод растёт";
+            _tutorialPoint3Desc.text = "В сайдбаре карточки линий. Жми кнопку улучшения — закупщик, производитель или продавец поднимут уровень. Дороже — но быстрее и больше денег.";
 
-            _tutorialTipText.text = "Практика: пауза → убрать брак → улучшить закупщика → открыть «СБОРКУ». Таймер смены остановлен, спешить некуда.";
+            _tutorialPoint4Title.text = "Сборка — деньги побольше";
+            _tutorialPoint4Desc.text = "Вкладка «СБОРКА» над карточками. Там из готовых деталей делают редукторы, приводы, турбины. Выгоднее, чем продавать поштучно.";
+
+            _tutorialTipText.text = "Практика: пауза → убрать брак → улучшить закупщика → открыть сборку → построить линию. Смена стоит, спешить некуда.";
         }
 
         void OnTutorialNextClicked()
@@ -1464,8 +1467,8 @@ namespace Game.Factory
         void BeginPracticeStep(int step)
         {
             _practiceStep = step;
-            _practiceBadge.text = "ПРАКТИКА · ШАГ " + (step + 1) + " ИЗ 4";
-            _practiceCounter.text = step + " / 4";
+            _practiceBadge.text = "ПРАКТИКА · ШАГ " + (step + 1) + " ИЗ 5";
+            _practiceCounter.text = step + " / 5";
 
             FactorySim sim = _game.Sim;
 
@@ -1473,25 +1476,30 @@ namespace Game.Factory
             {
                 case 0:
                     _practicePausePressed = false;
-                    _practiceTask.text = "Нажмите «ПАУЗА» вверху (или пробел). Завод остановится — это проверка.";
+                    _practiceTask.text = "Жми «ПАУЗУ» вверху (или пробел). Завод встанет — проверь, как работает.";
                     _practiceTask.color = TextWhite;
                     break;
 
                 case 1:
-                    _practiceTask.text = "Уберите брак: кликните по красной детали в цехе или по красной плашке сверху.";
+                    _practiceTask.text = "Появился брак — красная деталь на складе. Кликни по ней в цехе или по плашке сверху. 12 секунд на реакцию.";
                     _practiceTask.color = AccentRed;
                     if (sim != null && !sim.Lines[0].Defect) sim.SpawnTutorialDefect(0);
                     break;
 
                 case 2:
-                    _practiceTask.text = "Улучшите закупщика на линии «Шестерёнки»: найдите его карточку в сайдбаре и нажмите кнопку улучшения.";
+                    _practiceTask.text = "Улучши закупщика на линии «Шестерёнки». Карточка в сайдбаре, кнопка улучшения — тыкни.";
                     _practiceTask.color = AccentCyan;
                     if (sim != null) _practiceBuyerLevel = sim.Lines[0].Buyer.Level;
                     break;
 
-                default:
-                    _practiceTask.text = "Откройте вкладку «СБОРКА» над карточками — там собирают редукторы, приводы и турбины.";
+                case 3:
+                    _practiceTask.text = "Открой вкладку «СБОРКА» над карточками. Там редукторы, приводы, турбины — денег больше.";
                     _practiceTask.color = AccentPink;
+                    break;
+
+                case 4:
+                    _practiceTask.text = "Построй линию «Корпуса» (вторая карточка). Кнопка постройки — и новая линия заработает.";
+                    _practiceTask.color = AccentAmber;
                     break;
             }
         }
@@ -1514,7 +1522,7 @@ namespace Game.Factory
                     if (!_practicePausePressed && sim.Paused)
                     {
                         _practicePausePressed = true;
-                        _practiceTask.text = "Пауза работает. Теперь нажмите «ПРОДОЛЖИТЬ», чтобы вернуть смену.";
+                        _practiceTask.text = "Пауза работает. Теперь жми «ПРОДОЛЖИТЬ», чтобы вернуть смену.";
                         _practiceTask.color = AccentGreen;
                     }
                     else if (_practicePausePressed && !sim.Paused)
@@ -1532,8 +1540,13 @@ namespace Game.Factory
                     if (sim.Lines[0].Buyer.Level > _practiceBuyerLevel) CompletePracticeStep();
                     break;
 
-                default:
+                case 3:
                     if (_selected == sim.Lines.Count) CompletePracticeStep();
+                    break;
+
+                case 4:
+                    // Вторая линия (Корпуса) построена
+                    if (sim.Lines[1].Built) CompletePracticeStep();
                     break;
             }
         }
@@ -1541,13 +1554,13 @@ namespace Game.Factory
         void CompletePracticeStep()
         {
             int done = _practiceStep + 1;
-            if (done >= 4)
+            if (done >= 5)
             {
                 CompletePractice();
                 return;
             }
 
-            _practiceCounter.text = done + " / 4";
+            _practiceCounter.text = done + " / 5";
             BeginPracticeStep(done);
         }
 
@@ -1558,7 +1571,7 @@ namespace Game.Factory
             {
                 sim.TutorialMode = false;
                 sim.ClearTutorialDefects();
-                sim.SetEvent("Обучение пройдено: пауза, брак, улучшение и сборка — всё под контролем", EventTone.Good);
+                sim.SetEvent("Обучение пройдено: пауза, брак, улучшение, сборка и новая линия — ты готов", EventTone.Good);
             }
 
             FinishPractice();
