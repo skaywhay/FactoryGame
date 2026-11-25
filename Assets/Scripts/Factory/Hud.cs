@@ -779,18 +779,6 @@ namespace Game.Factory
             SetRect(_tutorialSubTitle.rectTransform, new Vector2(24f, -74f), new Vector2(630f, 20f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
             _tutorialPoint1Title = NewText(rect, "P1_T", "", 13, AccentCyan, TextAnchor.UpperLeft);
-            SetRect(_tutorialPoint1Title.rectTransform, new Vector2(24f, -106f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            _tutorialPoint1Title.fontStyle = FontStyle.Bold;
-            _tutorialPoint1Desc = NewText(rect, "P1_D", "", 12, TextMuted, TextAnchor.UpperLeft);
-            SetRect(_tutorialPoint1Desc.rectTransform, new Vector2(24f, -126f), new Vector2(630f, 36f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-
-            _tutorialPoint2Title = NewText(rect, "P2_T", "", 13, AccentGreen, TextAnchor.UpperLeft);
-            SetRect(_tutorialPoint2Title.rectTransform, new Vector2(24f, -170f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            _tutorialPoint2Title.fontStyle = FontStyle.Bold;
-            _tutorialPoint2Desc = NewText(rect, "P2_D", "", 12, TextMuted, TextAnchor.UpperLeft);
-            SetRect(_tutorialPoint2Desc.rectTransform, new Vector2(24f, -190f), new Vector2(630f, 36f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-
-            _tutorialPoint1Title = NewText(rect, "P1_T", "", 13, AccentCyan, TextAnchor.UpperLeft);
             SetRect(_tutorialPoint1Title.rectTransform, new Vector2(24f, -80f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             _tutorialPoint1Title.fontStyle = FontStyle.Bold;
             _tutorialPoint1Desc = NewText(rect, "P1_D", "", 12, TextMuted, TextAnchor.UpperLeft);
@@ -816,7 +804,6 @@ namespace Game.Factory
 
             _tutorialTipText = NewText(rect, "Tip", "", 12, TextWhite, TextAnchor.UpperLeft);
             SetRect(_tutorialTipText.rectTransform, new Vector2(24f, -360f), new Vector2(630f, 44f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            SetRect(_tutorialTipText.rectTransform, new Vector2(24f, -308f), new Vector2(630f, 44f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
             _tutorialPrev = NewButton(rect, "Prev", "НАЗАД", Color.white, 12, _sprBtnNeutral);
             SetRect(_tutorialPrev.GetComponent<RectTransform>(), new Vector2(24f, 20f), new Vector2(90f, 32f), new Vector2(0f, 0f), new Vector2(0f, 0f));
