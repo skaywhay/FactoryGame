@@ -790,20 +790,32 @@ namespace Game.Factory
             _tutorialPoint2Desc = NewText(rect, "P2_D", "", 12, TextMuted, TextAnchor.UpperLeft);
             SetRect(_tutorialPoint2Desc.rectTransform, new Vector2(24f, -190f), new Vector2(630f, 36f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
+            _tutorialPoint1Title = NewText(rect, "P1_T", "", 13, AccentCyan, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint1Title.rectTransform, new Vector2(24f, -80f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            _tutorialPoint1Title.fontStyle = FontStyle.Bold;
+            _tutorialPoint1Desc = NewText(rect, "P1_D", "", 12, TextMuted, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint1Desc.rectTransform, new Vector2(24f, -100f), new Vector2(630f, 40f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
+            _tutorialPoint2Title = NewText(rect, "P2_T", "", 13, AccentRed, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint2Title.rectTransform, new Vector2(24f, -150f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            _tutorialPoint2Title.fontStyle = FontStyle.Bold;
+            _tutorialPoint2Desc = NewText(rect, "P2_D", "", 12, TextMuted, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint2Desc.rectTransform, new Vector2(24f, -170f), new Vector2(630f, 40f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
             _tutorialPoint3Title = NewText(rect, "P3_T", "", 13, AccentPink, TextAnchor.UpperLeft);
-            SetRect(_tutorialPoint3Title.rectTransform, new Vector2(24f, -200f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            SetRect(_tutorialPoint3Title.rectTransform, new Vector2(24f, -220f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             _tutorialPoint3Title.fontStyle = FontStyle.Bold;
             _tutorialPoint3Desc = NewText(rect, "P3_D", "", 12, TextMuted, TextAnchor.UpperLeft);
-            SetRect(_tutorialPoint3Desc.rectTransform, new Vector2(24f, -220f), new Vector2(630f, 40f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            SetRect(_tutorialPoint3Desc.rectTransform, new Vector2(24f, -240f), new Vector2(630f, 40f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
             _tutorialPoint4Title = NewText(rect, "P4_T", "", 13, AccentAmber, TextAnchor.UpperLeft);
-            SetRect(_tutorialPoint4Title.rectTransform, new Vector2(24f, -270f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            SetRect(_tutorialPoint4Title.rectTransform, new Vector2(24f, -290f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             _tutorialPoint4Title.fontStyle = FontStyle.Bold;
             _tutorialPoint4Desc = NewText(rect, "P4_D", "", 12, TextMuted, TextAnchor.UpperLeft);
-            SetRect(_tutorialPoint4Desc.rectTransform, new Vector2(24f, -290f), new Vector2(630f, 40f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            SetRect(_tutorialPoint4Desc.rectTransform, new Vector2(24f, -310f), new Vector2(630f, 40f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
             _tutorialTipText = NewText(rect, "Tip", "", 12, TextWhite, TextAnchor.UpperLeft);
-            SetRect(_tutorialTipText.rectTransform, new Vector2(24f, -340f), new Vector2(630f, 44f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            SetRect(_tutorialTipText.rectTransform, new Vector2(24f, -360f), new Vector2(630f, 44f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             SetRect(_tutorialTipText.rectTransform, new Vector2(24f, -308f), new Vector2(630f, 44f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
             _tutorialPrev = NewButton(rect, "Prev", "НАЗАД", Color.white, 12, _sprBtnNeutral);
