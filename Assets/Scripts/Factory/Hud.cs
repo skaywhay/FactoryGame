@@ -88,6 +88,8 @@ namespace Game.Factory
         Text _tutorialPoint2Desc;
         Text _tutorialPoint3Title;
         Text _tutorialPoint3Desc;
+        Text _tutorialPoint4Title;
+        Text _tutorialPoint4Desc;
         Text _tutorialTipText;
         Button _tutorialPrev;
         Button _tutorialNext;
@@ -758,7 +760,7 @@ namespace Game.Factory
             rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = new Vector2(680f, 460f);
+            rect.sizeDelta = new Vector2(680f, 520f);
             AddSlicedImage(rect, _sprSidebarBg);
 
             _tutorialStepBadge = NewText(rect, "Badge", "ШАГ 1 ИЗ 4", 12, AccentAmber, TextAnchor.UpperLeft);
@@ -794,7 +796,14 @@ namespace Game.Factory
             _tutorialPoint3Desc = NewText(rect, "P3_D", "", 12, TextMuted, TextAnchor.UpperLeft);
             SetRect(_tutorialPoint3Desc.rectTransform, new Vector2(24f, -254f), new Vector2(630f, 36f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
+            _tutorialPoint4Title = NewText(rect, "P4_T", "", 13, AccentAmber, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint4Title.rectTransform, new Vector2(24f, -298f), new Vector2(630f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            _tutorialPoint4Title.fontStyle = FontStyle.Bold;
+            _tutorialPoint4Desc = NewText(rect, "P4_D", "", 12, TextMuted, TextAnchor.UpperLeft);
+            SetRect(_tutorialPoint4Desc.rectTransform, new Vector2(24f, -318f), new Vector2(630f, 36f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+
             _tutorialTipText = NewText(rect, "Tip", "", 12, TextWhite, TextAnchor.UpperLeft);
+            SetRect(_tutorialTipText.rectTransform, new Vector2(24f, -362f), new Vector2(630f, 44f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             SetRect(_tutorialTipText.rectTransform, new Vector2(24f, -308f), new Vector2(630f, 44f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
             _tutorialPrev = NewButton(rect, "Prev", "НАЗАД", Color.white, 12, _sprBtnNeutral);
