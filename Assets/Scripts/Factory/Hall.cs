@@ -437,7 +437,7 @@ namespace Game.Factory
             Transform small = CreateCog(orbitPivot.transform, "cog-b",
                 new Vector3(0f, 0f, -smallR), 0.85f, 0f);
 
-            if (big != null) station.Spinners.Add(orbitPivot); // вращаем общий pivot
+            if (big != null) station.Spinners.Add(orbitPivot.transform); // вращаем общий pivot
             // small не добавляем отдельно — он вращается вместе с big через orbitPivot
 
             station.Title = MakeLabel(station.Root, "ГЕНЕРАТОР " + (index + 1), new Vector3(0f, 3.78f, 0f), GeneratorColor, 0.052f);
