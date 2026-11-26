@@ -299,35 +299,35 @@ namespace Game.Factory
             }
         }
 
-        // Создаёт линию на заданной зоне (3 станции по X = -4, 0, +4 локально).
+        // Создаёт линию на заданной зоне (3 станции по X = -4, 0, +4 локально к зоне).
         static LineView CreateLineOnZone(Transform root, Transform zone, int lineIndex, float[] stationX, HallRefs refs)
         {
             Color tone = LineColors[lineIndex];
             ProductKind kind = (ProductKind)lineIndex;
             var view = new LineView();
 
-            var row = new GameObject("Line " + (lineIndex + 1));
-            row.transform.SetParent(root, false);
-            // Позиция строки = позиция зоны в мире
-            row.transform.position = zone.position;
-            view.Root = row.transform;
+            // Родитель для линий - сама зона (как у генераторов/сборок), а не отдельный row
+            var lineRoot = new GameObject("Line " + (lineIndex + 1));
+            lineRoot.transform.SetParent(zone, false);
+            lineRoot.transform.localPosition = Vector3.zero;
+            view.Root = lineRoot.transform;
 
-            CreateBay(row.transform, tone, 0.26f);
+            CreateBay(lineRoot.transform, tone, 0.26f);
 
             view.Stations = new Station[3];
-            view.Stations[0] = CreateBuyerOnZone(row.transform, new Vector3(stationX[0], 0f, 0f), tone, refs);
-            view.Stations[1] = CreateProducerOnZone(row.transform, new Vector3(stationX[1], 0f, 0f), tone, refs);
-            view.Stations[2] = CreateSellerOnZone(row.transform, new Vector3(stationX[2], 0f, 0f), tone, refs);
+            view.Stations[0] = CreateBuyerOnZone(lineRoot.transform, new Vector3(stationX[0], 0f, 0f), tone, refs);
+            view.Stations[1] = CreateProducerOnZone(lineRoot.transform, new Vector3(stationX[1], 0f, 0f), tone, refs);
+            view.Stations[2] = CreateSellerOnZone(lineRoot.transform, new Vector3(stationX[2], 0f, 0f), tone, refs);
 
             var empty = new GameObject("Empty " + (lineIndex + 1));
-            empty.transform.SetParent(root, false);
-            empty.transform.position = zone.position;
+            empty.transform.SetParent(zone, false);
+            empty.transform.localPosition = Vector3.zero;
             view.Empty = empty.transform;
 
             CreateBay(empty.transform, tone, 0.14f, true);
 
             view.Sign = CreateSign(root, lineIndex, zone.position.z);
-            CreateDefectMarker(row.transform, view, lineIndex);
+            CreateDefectMarker(lineRoot.transform, view, lineIndex);
             return view;
         }
 
