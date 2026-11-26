@@ -115,6 +115,8 @@ namespace Game.Factory
         // Settings
         GameObject _settings;
         GameObject _settingsContent;
+        ScrollRect _settingsScrollRect;
+        Scrollbar _settingsScrollbar;
         Slider _musicSlider;
         Text _musicVolumeText;
         Slider _sfxSlider;
@@ -947,6 +949,12 @@ namespace Game.Factory
             _gameOver.SetActive(false);
         }
 
+        // Размер модалки настроек и желоб под тонкую полосу прокрутки.
+        const float SettingsWidth = 560f;
+        const float SettingsHeight = 520f;
+        const float SettingsHeaderHeight = 56f;
+        const float ScrollbarGutter = 18f; // 6 px полоса + 12 px отступа
+
         void BuildSettings(RectTransform root)
         {
             _settings = NewRect(root, "SettingsModal").gameObject;
@@ -955,35 +963,41 @@ namespace Game.Factory
             rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = new Vector2(480f, 420f);
+            rect.sizeDelta = new Vector2(SettingsWidth, SettingsHeight);
             AddSlicedImage(rect, _sprSidebarBg);
 
-            // Header with title and close button
-            RectTransform header = NewRect(rect, "Header");
-            header.anchorMin = new Vector2(0f,  1f);
-            header.anchorMax = new Vector2(1f, 1f);
-            header.pivot = new Vector2(0.5f, 1f);
-            header.anchoredPosition = new Vector2(0f, -10f);
-            header.sizeDelta = new Vector2(-20f, 40f);
-            AddSlicedImage(header, _sprSidebarBg);
+            const float pad = 24f;
 
-            Text title = NewText(header, "SettingsTitle", "НАСТРОЙКИ", 20, AccentCyan, TextAnchor.MiddleCenter);
-            SetRect(title.rectTransform, new Vector2(0f, 0f), new Vector2(320f, 30f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            // Шапка: заголовок слева, кнопка закрытия справа — как у ТАБЛИЦЫ.
+            Text title = NewText(rect, "SettingsTitle", "НАСТРОЙКИ", 20, AccentCyan, TextAnchor.MiddleLeft);
+            SetRect(title.rectTransform, new Vector2(pad, -SettingsHeaderHeight * 0.5f), new Vector2(300f, 30f),
+                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f));
             title.fontStyle = FontStyle.Bold;
 
-            Button closeBtn = NewButton(header, "CloseSettings", "✕", Color.white, 14, _sprBtnNeutral);
-            SetRect(closeBtn.GetComponent<RectTransform>(), new Vector2(-12f, 0f), new Vector2(32f, 32f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
+            Button closeBtn = NewButton(rect, "CloseSettings", "ЗАКРЫТЬ", Color.white, 12, _sprBtnNeutral);
+            SetRect(closeBtn.GetComponent<RectTransform>(), new Vector2(-pad, -SettingsHeaderHeight * 0.5f), new Vector2(96f, 32f),
+                new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
             closeBtn.onClick.AddListener(CloseSettings);
 
-            // Scrollable content area for settings
+            // Разделитель под шапкой — тот же приём, что у остальных модалок.
+            RectTransform headerSep = NewRect(rect, "HeaderSeparator");
+            SetRect(headerSep, new Vector2(pad, -SettingsHeaderHeight), new Vector2(-pad * 2f, 1f),
+                new Vector2(0f, 1f), new Vector2(0f, 1f));
+            Image sepImg = headerSep.gameObject.AddComponent<Image>();
+            sepImg.color = ColorBorder;
+            sepImg.raycastTarget = false;
+
+            // Прокрутка. Справа оставляем желоб, чтобы полоса не легла на строки.
             GameObject scrollGo = NewRect(rect, "SettingsScrollView").gameObject;
             ScrollRect scrollRect = scrollGo.AddComponent<ScrollRect>();
             RectTransform scrollRectTransform = scrollGo.GetComponent<RectTransform>();
-            scrollRectTransform.anchorMin = new Vector2(0f, 0f);
-            scrollRectTransform.anchorMax = new Vector2(1f, 1f);
+            scrollRectTransform.anchorMin = Vector2.zero;
+            scrollRectTransform.anchorMax = Vector2.one;
             scrollRectTransform.pivot = new Vector2(0.5f, 1f);
-            scrollRectTransform.anchoredPosition = new Vector2(0f, -55f);
-            scrollRectTransform.sizeDelta = new Vector2(-40f, -95f);
+            scrollRectTransform.anchoredPosition = Vector2.zero;
+            scrollRectTransform.sizeDelta = Vector2.zero;
+            scrollRectTransform.offsetMin = new Vector2(pad, 16f);
+            scrollRectTransform.offsetMax = new Vector2(-pad - ScrollbarGutter, -SettingsHeaderHeight - 8f);
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
@@ -1012,11 +1026,11 @@ namespace Game.Factory
             contentRect.anchorMax = new Vector2(1f, 1f);
             contentRect.pivot = new Vector2(0.5f, 1f);
             contentRect.anchoredPosition = new Vector2(0f, 0f);
-            contentRect.sizeDelta = new Vector2(-20f, 300f);
+            contentRect.sizeDelta = new Vector2(-16f, 300f);
 
             VerticalLayoutGroup layout = _settingsContent.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(20, 20, 16, 16);
-            layout.spacing = 20f;
+            layout.padding = new RectOffset(0, 0, 0, 0);
+            layout.spacing = 14f;
             layout.childControlWidth = true;
             layout.childForceExpandWidth = true;
             layout.childControlHeight = false;
@@ -1028,6 +1042,9 @@ namespace Game.Factory
             // IMPORTANT: ScrollRect needs content assigned
             scrollRect.content = contentRect;
 
+            BuildSettingsScrollbar(rect);
+            _settingsScrollRect = scrollRect;
+
             // Build setting sections
             BuildAudioSection(_settingsContent.transform);
             BuildGraphicsSection(_settingsContent.transform);
@@ -1035,6 +1052,56 @@ namespace Game.Factory
             BuildOtherSection(_settingsContent.transform);
 
             _settings.SetActive(false);
+        }
+
+        // Тонкая полоса прокрутки в цветах игры: узкий трек + cyan-бегунок.
+        // Стандартный юнитовский скроллбар в этом окне выглядел чужеродно.
+        void BuildSettingsScrollbar(RectTransform parent)
+        {
+            GameObject sbGo = NewRect(parent, "SettingsScrollbar").gameObject;
+            Scrollbar scrollbar = sbGo.AddComponent<Scrollbar>();
+            RectTransform sbRect = sbGo.GetComponent<RectTransform>();
+            sbRect.anchorMin = new Vector2(1f, 0f);
+            sbRect.anchorMax = new Vector2(1f, 1f);
+            sbRect.pivot = new Vector2(1f, 0.5f);
+            // Полоса по вертикали выровнена по области прокрутки, а не по всей модалке.
+            sbRect.anchoredPosition = new Vector2(-28f, -24f);
+            sbRect.sizeDelta = new Vector2(6f, -SettingsHeaderHeight - 8f - 24f);
+            scrollbar.direction = Scrollbar.Direction.BottomToTop;
+
+            // Трек
+            Image trackImg = sbGo.AddComponent<Image>();
+            trackImg.sprite = null;
+            trackImg.color = new Color(0.078f, 0.102f, 0.122f, 0.35f);
+            trackImg.raycastTarget = true;
+
+            // Область перетаскивания
+            GameObject sliding = NewRect(sbRect, "Sliding Area").gameObject;
+            RectTransform slidingRect = sliding.GetComponent<RectTransform>();
+            slidingRect.anchorMin = Vector2.zero;
+            slidingRect.anchorMax = Vector2.one;
+            slidingRect.sizeDelta = Vector2.zero;
+            Image slidingImg = sliding.AddComponent<Image>();
+            slidingImg.color = new Color(0, 0, 0, 0);
+            slidingImg.raycastTarget = true;
+
+            // Бегунок: полоска accent_bar, 2 px скругления, cyan с альфой.
+            GameObject handle = NewRect(slidingRect, "Handle").gameObject;
+            RectTransform handleRect = handle.GetComponent<RectTransform>();
+            handleRect.anchorMin = Vector2.zero;
+            handleRect.anchorMax = new Vector2(1f, 0f);
+            handleRect.pivot = new Vector2(0.5f, 0f);
+            handleRect.anchoredPosition = Vector2.zero;
+            handleRect.sizeDelta = new Vector2(0f, 60f);
+            Image handleImg = handle.AddComponent<Image>();
+            handleImg.sprite = _sprAccentBar;
+            handleImg.type = Image.Type.Sliced;
+            handleImg.color = new Color(AccentCyan.r, AccentCyan.g, AccentCyan.b, 0.55f);
+            handleImg.raycastTarget = true;
+
+            scrollbar.targetGraphic = handleImg;
+            scrollbar.handleRect = handleRect;
+            _settingsScrollbar = scrollbar;
         }
 
         void BuildAudioSection(Transform parent)
@@ -1434,6 +1501,21 @@ namespace Game.Factory
             return btn;
         }
 
+        // Полоса рисуется, только если контент выше окна: иначе в желобе
+// висит бегунок без причины.
+        void UpdateSettingsScrollbar()
+        {
+            if (_settingsScrollRect == null || _settingsScrollbar == null) return;
+            if (!_settings.activeSelf) return;
+
+            float content = _settingsScrollRect.content != null ? _settingsScrollRect.content.rect.height : 0f;
+            float viewport = _settingsScrollRect.viewport != null ? _settingsScrollRect.viewport.rect.height : 0f;
+            bool needed = content - viewport > 1f;
+
+            if (_settingsScrollbar.gameObject.activeSelf != needed)
+                _settingsScrollbar.gameObject.SetActive(needed);
+        }
+
         void OpenSettings()
         {
             if (_settings != null) _settings.SetActive(true);
@@ -1564,6 +1646,12 @@ namespace Game.Factory
         {
             FactorySim sim = _game.Sim;
             if (sim == null) return;
+
+            // Esc закрывает окно настроек — как «ЗАКРЫТЬ», только с клавиатуры.
+            if (_settings != null && _settings.activeSelf && Input.GetKeyDown(KeyCode.Escape)) CloseSettings();
+
+            // Полоса прокрутки нужна только когда контент не влезает.
+            UpdateSettingsScrollbar();
 
             TickPractice();
 
