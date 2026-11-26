@@ -1003,6 +1003,8 @@ namespace Game.Factory
             scrollRect.vertical = true;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
             scrollRect.elasticity = 0.1f;
+            // Дефолтные 10 px на щелчок колеса — это 40+ щелчков до низа окна.
+            scrollRect.scrollSensitivity = 35f;
 
             // Viewport
             GameObject viewport = NewRect(scrollRectTransform, "Viewport").gameObject;
@@ -1619,6 +1621,13 @@ namespace Game.Factory
         public bool TutorialOpen
         {
             get { return _tutorial != null && _tutorial.activeSelf; }
+        }
+
+        // Открыто ли окно настроек — музыка обязана играть, иначе подстройка
+        // громкости происходит в тишине и слайдер кажется нерабочим.
+        public bool SettingsOpen
+        {
+            get { return _settings != null && _settings.activeSelf; }
         }
 
         public void TogglePause()

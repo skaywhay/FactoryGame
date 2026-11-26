@@ -102,11 +102,14 @@ namespace Game.Factory
 
             bool paused = Sim.Paused || _hud.TutorialOpen;
 
-            // Пауза музыки вместе с игрой
+            // Пауза музыки вместе с игрой — но не когда открыты настройки:
+            // громкость должна быть слышно в момент подстройки.
+            bool settingsOpen = _hud.SettingsOpen;
+            bool musicPaused = (Sim.Paused && !settingsOpen) || _hud.TutorialOpen;
             if (MusicSource != null)
             {
-                if (paused && MusicSource.isPlaying) MusicSource.Pause();
-                else if (!paused && !MusicSource.isPlaying) MusicSource.UnPause();
+                if (musicPaused && MusicSource.isPlaying) MusicSource.Pause();
+                else if (!musicPaused && !MusicSource.isPlaying) MusicSource.UnPause();
             }
 
             float dt = Time.deltaTime;
