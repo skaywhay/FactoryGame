@@ -904,7 +904,7 @@ namespace Game.Factory
 
             // Header with title and close button
             RectTransform header = NewRect(rect, "Header");
-            header.anchorMin = new Vector2(0f, 1f);
+            header.anchorMin = new Vector2(0f,  1f);
             header.anchorMax = new Vector2(1f, 1f);
             header.pivot = new Vector2(0.5f, 1f);
             header.anchoredPosition = new Vector2(0f, -10f);
@@ -1201,14 +1201,6 @@ namespace Game.Factory
             LayoutElement sliderLayout = sr.gameObject.AddComponent<LayoutElement>();
             sliderLayout.preferredHeight = 24f;
 
-            // Background
-            GameObject bg = NewRect(sr, "Background").gameObject;
-            Image bgImg = bg.AddComponent<Image>();
-            bgImg.sprite = _sprBtnNeutral;
-            bgImg.type = Image.Type.Sliced;
-            bgImg.color = new Color(0.1f, 0.1f, 0.15f, 1f);
-            slider.targetGraphic = bgImg;
-
             // Fill
             GameObject fillArea = NewRect(sr, "Fill Area").gameObject;
             RectTransform far = fillArea.GetComponent<RectTransform>();
@@ -1397,6 +1389,7 @@ namespace Game.Factory
             // Force layout rebuild for settings content
             if (_settingsContent != null)
             {
+                _game.Sim.Paused = true;
                 Canvas.ForceUpdateCanvases();
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_settingsContent.GetComponent<RectTransform>());
                 var scrollRect = _settings.GetComponentInChildren<ScrollRect>();
@@ -1426,7 +1419,11 @@ namespace Game.Factory
 
         void CloseSettings()
         {
-            if (_settings != null) _settings.SetActive(false);
+            if (_settings != null)
+            {
+                _settings.SetActive(false);
+                _game.Sim.Paused = false;
+            }
         }
 
         void OnMusicVolumeChanged(float value)
