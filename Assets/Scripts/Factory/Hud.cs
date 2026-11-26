@@ -395,6 +395,10 @@ namespace Game.Factory
             tutorial.onClick.AddListener(ToggleTutorial);
             _tutorialButtonLabel = tutorial.GetComponentInChildren<Text>();
 
+            Button settings = NewButton(bar, "Settings", "НАСТРОЙКИ", Color.white, 12, _sprBtnNeutral);
+            SetRect(settings.GetComponent<RectTransform>(), new Vector2(-380f, 0f), new Vector2(86f, 32f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
+            settings.onClick.AddListener(OpenSettings);
+
             // Пауза. Специально рядом с таблицей и обучением — игрок ищет её там же.
             _pauseButton = NewButton(bar, "Pause", "ПАУЗА", Color.white, 12, _sprBtnNeutral);
             SetRect(_pauseButton.GetComponent<RectTransform>(), new Vector2(-290f, 0f), new Vector2(82f, 32f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
@@ -612,19 +616,15 @@ namespace Game.Factory
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = true;
 
-            // +1 для вкладки настроек
-            _tabs = new Button[ProductInfo.Count + 2];
+            // Только линии + сборка (настройки перенесены в топбар)
+            _tabs = new Button[ProductInfo.Count + 1];
 
             for (int i = 0; i < _tabs.Length; i++)
             {
                 int index = i;
-                string label;
-                if (i < ProductInfo.Count)
-                    label = ProductInfo.ShortName((ProductKind)i);
-                else if (i == ProductInfo.Count)
-                    label = "СБОРКА";
-                else
-                    label = "НАСТРОЙКИ";
+                string label = i < ProductInfo.Count
+                    ? ProductInfo.ShortName((ProductKind)i)
+                    : "СБОРКА";
 
                 Button tab = NewButton(tabContainer, "Tab " + i, label, Color.white, 12, null);
                 Image tabImg = tab.GetComponent<Image>();
@@ -1154,17 +1154,12 @@ namespace Game.Factory
         {
             bool machines = _selected < sim.Lines.Count;
             bool assembly = _selected == sim.Lines.Count;
-            bool settings = _selected == sim.Lines.Count + 1;
 
             for (int i = 0; i < _cards.Length; i++)
                 if (_cards[i].Root != null) _cards[i].Root.gameObject.SetActive(machines);
             for (int i = 0; i < _assemblyCards.Length; i++)
                 if (_assemblyCards[i].Root != null) _assemblyCards[i].Root.gameObject.SetActive(assembly);
             if (_build != null && _build.Root != null) _build.Root.gameObject.SetActive(assembly);
-
-            // Settings panel
-            if (_settings != null)
-                _settings.SetActive(settings);
         }
 
         void UpdateTabs(FactorySim sim)
