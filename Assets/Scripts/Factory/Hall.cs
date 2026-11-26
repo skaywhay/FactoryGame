@@ -410,18 +410,12 @@ namespace Game.Factory
             station.Root.SetParent(zone, false);
             station.Root.localPosition = localPos;
 
-            Spawn("__generator", station.Root, new Vector3(0f, 0f, 0.2f), 2.5f, 180);
+            Spawn("__generator", station.Root, new Vector3(0f, 0f, 0.2f), 2.5f, 90);
             Spawn("warning-traffic", station.Root, new Vector3(-1.5f, 0f, -0.75f), 0.75f, 12f);
 
-            // Позиции шестерёнок (мировые Y из Play Mode переведены в локальные).
-            // Базовые X/Z от старого кода, Y — как в Play Mode.
-            // index 0 = Генератор 1 (левее), index 1 = Генератор 2 (правее).
-            float bigY = (index == 0) ? 2.336f : 2.316f;
-            float smallY = (index == 0) ? 2.313f : 2.293f;
-
-            Transform big = CreateCog(station.Root, "cog-a", new Vector3(-0.125f, bigY, -1.05f), 1.6f, 0f);
+            Transform big = CreateCog(station.Root, "cog-a", new Vector3(0.125f, 0.375f, 1.375f), 1.6f, 0f);
             if (big != null) station.Spinners.Add(big);
-            Transform small = CreateCog(station.Root, "cog-b", new Vector3(-0.125f, smallY, -1.25f), 0.85f, 0);
+            Transform small = CreateCog(station.Root, "cog-b", new Vector3(0.125f, -0.125f, 1.375f), 0.85f, 0);
             if (small != null) station.Spinners.Add(small);
 
             station.Title = MakeLabel(station.Root, "ГЕНЕРАТОР " + (index + 1), new Vector3(0f, 3.78f, 0f), GeneratorColor, 0.052f);

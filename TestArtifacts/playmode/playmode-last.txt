@@ -1,0 +1,11 @@
+passed
+money 919,0
+day 1
+bought 4
+produced 1
+sold 1
+energy 9 / 12
+materials 2
+products 0
+assembly 1
+screenshot C:\Users\Даниил\MyFactory\TestArtifacts\playmode\playmode-20261118-171640.png

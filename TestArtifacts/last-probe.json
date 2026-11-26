@@ -1,0 +1,48 @@
+{
+    "ok":  true,
+    "unity":  "6000.6.9f1",
+    "product":  "Factory Prototype",
+    "scene":  "Factory",
+    "durationSeconds":  20.147,
+    "frames":  970,
+    "averageFps":  48.146,
+    "minFps":  0.292,
+    "screen":  {
+                   "width":  1920,
+                   "height":  1080
+               },
+    "checks":  [
+                   "PASS hud created",
+                   "PASS energy within capacity - 6 / 8",
+                   "PASS three lines",
+                   "PASS two generators",
+                   "PASS gear line built"
+               ],
+    "failures":  [
+
+                 ],
+    "errors":  [
+
+               ],
+    "screenshots":  [
+                        "C:\\Users\\Даниил\\MyFactory\\TestArtifacts\\probe-20261118-171818\\shot-00-start.png",
+                        "C:\\Users\\Даниил\\MyFactory\\TestArtifacts\\probe-20261118-171818\\shot-01-t6.png",
+                        "C:\\Users\\Даниил\\MyFactory\\TestArtifacts\\probe-20261118-171818\\shot-02-t8.png",
+                        "C:\\Users\\Даниил\\MyFactory\\TestArtifacts\\probe-20261118-171818\\shot-03-t10.png",
+                        "C:\\Users\\Даниил\\MyFactory\\TestArtifacts\\probe-20261118-171818\\shot-04-t12.png",
+                        "C:\\Users\\Даниил\\MyFactory\\TestArtifacts\\probe-20261118-171818\\shot-05-t14.png",
+                        "C:\\Users\\Даниил\\MyFactory\\TestArtifacts\\probe-20261118-171818\\shot-06-t16.png",
+                        "C:\\Users\\Даниил\\MyFactory\\TestArtifacts\\probe-20261118-171818\\shot-07-t18.png",
+                        "C:\\Users\\Даниил\\MyFactory\\TestArtifacts\\probe-20261118-171818\\shot-08-end.png"
+                    ],
+    "metrics":  {
+                    "money":  320,
+                    "day":  1,
+                    "energyUsed":  6,
+                    "energyCapacity":  8,
+                    "materials":  1,
+                    "products":  0,
+                    "totalSold":  8
+                },
+    "reportPath":  "C:\\Users\\Даниил\\MyFactory\\TestArtifacts\\probe-20261118-171818\\report.json"
+}
