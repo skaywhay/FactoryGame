@@ -49,6 +49,9 @@ namespace Game.Factory
 
         // Все партикл-системы в зале, чтобы их можно было ставить на паузу.
         public readonly List<ParticleSystem> ParticleSystems = new List<ParticleSystem>();
+
+        // Ссылка на корневой объект карты (FBX), чтобы можно было управлять зонами из кода.
+        public GameObject MapRoot;
     }
 
     // Собирает весь 3D-зал кодом. Координаты простые:
@@ -114,6 +117,343 @@ namespace Game.Factory
 
             refs.Camera = CreateCamera(root);
             return refs;
+        }
+
+        // --- Новая карта из FBX (FactoryHall_Map.fbx) ---
+        // Загружает готовую 3D-модель цеха и расставляет игровые объекты
+        // на предустановленных зонах (Zone_Line1/2/3, Zone_Generators, Zone_Assembly1/2/3).
+        // Координаты зон заданы в README карты (масштаб 1.0, клетка 2.0м, пол Y=0).
+        public static HallRefs BuildFromMap(Transform root)
+        {
+            LoadAssets();
+
+            var refs = new HallRefs();
+
+            // 1. Загружаем FBX карту из Resources
+            GameObject mapPrefab = Resources.Load<GameObject>("Models/FactoryMap/FactoryHall_Map");
+            if (mapPrefab == null)
+            {
+                Debug.LogError("[HallBuilder] FactoryHall_Map.fbx не найден в Resources/Models/FactoryMap/! Кладём в Assets/Resources/Models/FactoryMap/");
+                return Build(root); // фоллбек на старую процедурную генерацию
+            }
+
+            GameObject mapInstance = Object.Instantiate(mapPrefab, root);
+            mapInstance.name = "FactoryHall_Map";
+            refs.MapRoot = mapInstance;
+
+            // Масштаб модели: в FBX 1 клетка = 2.0 юнита. Наша старая сетка была 1 клетка = 1 юнит.
+            // Поэтому масштабируем на 0.5, чтобы координаты зон совпали с ожиданиями кода.
+            mapInstance.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
+            mapInstance.transform.localPosition = Vector3.zero;
+
+            // 2. Настраиваем материалы под текущий рендер-пайплайн (URP/Built-in) и включаем Emission.
+            // (аналог FactoryMapSetup.AutoConfigureMaterials)
+            ConfigureMapMaterials(mapInstance);
+
+            // 3. Находим зоны и создаём станции на них.
+            // Координаты зон из FBX (масштаб 1.0) -> после масштаба 0.5 делим пополам.
+            // Zone_Line1_Gears_Yellow      center (0, 0, -7.45) -> stations X = -4, 0, +4
+            // Zone_Line2_Casings_Cyan      center (0, 0, -3.80) -> stations X = -4, 0, +4
+            // Zone_Line3_Microchips_Purple center (0, 0, +0.55) -> stations X = -4, 0, +4
+            // Zone_Generators_Substation   center (0, 0, +4.82) -> generators X = -4, +4
+            // Zone_Assembly1_Gearbox       center (+9.20, 0, -7.50)
+            // Zone_Assembly2_Drive         center (+9.20, 0, -3.80)
+            // Zone_Assembly3_Turbine       center (+9.20, 0, +0.60)
+
+            Transform mapTransform = mapInstance.transform;
+
+            // Линии: 3 зоны, на каждой 3 станции (Buyer, Producer, Seller) по X = -4, 0, +4
+            refs.Lines = new LineView[ProductInfo.Count];
+            string[] lineZoneNames = {
+                "Zone_Line1_Gears_Yellow",
+                "Zone_Line2_Casings_Cyan",
+                "Zone_Line3_Microchips_Purple"
+            };
+            float[] stationX = { -4f, 0f, 4f }; // локальные координаты внутри зоны
+
+            for (int i = 0; i < ProductInfo.Count; i++)
+            {
+                Transform zone = FindDeepChild(mapTransform, lineZoneNames[i]);
+                if (zone == null)
+                {
+                    Debug.LogWarning($"[HallBuilder] Зона {lineZoneNames[i]} не найдена в карте!");
+                    refs.Lines[i] = CreateLine(root, i, RowCenter(i), refs); // фоллбек
+                    continue;
+                }
+
+                // Позиция зоны уже учитывает масштаб 0.5
+                refs.Lines[i] = CreateLineOnZone(root, zone, i, stationX, refs);
+            }
+
+            // Генераторы: 2 станции на зоне Zone_Generators_Substation (X = -4, +4)
+            refs.Generators = new Station[2];
+            Transform genZone = FindDeepChild(mapTransform, "Zone_Generators_Substation");
+            if (genZone != null)
+            {
+                refs.Generators[0] = CreateGeneratorOnZone(root, genZone, new Vector3(-4f, 0f, 0f), 0);
+                refs.Generators[1] = CreateGeneratorOnZone(root, genZone, new Vector3(4f, 0f, 0f), 1);
+            }
+            else
+            {
+                Debug.LogWarning("[HallBuilder] Zone_Generators_Substation не найдена!");
+                refs.Generators[0] = CreateGenerator(root, new Vector3(-5f, 0f, 10.6f), 0);
+                refs.Generators[1] = CreateGenerator(root, new Vector3(5f, 0f, 10.6f), 1);
+            }
+
+            // Сборка: 3 зоны, по одной станции в каждой
+            refs.Assembly = new Station[Recipes.All.Length];
+            string[] assemblyZoneNames = {
+                "Zone_Assembly1_Gearbox",
+                "Zone_Assembly2_Drive",
+                "Zone_Assembly3_Turbine"
+            };
+
+            for (int i = 0; i < Recipes.All.Length; i++)
+            {
+                Transform zone = FindDeepChild(mapTransform, assemblyZoneNames[i]);
+                if (zone != null)
+                {
+                    // Центр зоны уже в правильной позиции, ставим станок в центр
+                    refs.Assembly[i] = CreateAssemblyOnZone(root, zone, Vector3.zero, i);
+                }
+                else
+                {
+                    Debug.LogWarning($"[HallBuilder] Зона {assemblyZoneNames[i]} не найдена!");
+                    float z = (i - 1) * 6f;
+                    refs.Assembly[i] = CreateAssembly(root, new Vector3(12f, 0f, z), i);
+                }
+            }
+
+            // 4. Освещение и камера
+            CreateLighting();
+            refs.Camera = CreateCamera(root);
+
+            // 5. Коллайдер пола для рейкастов (если не добавлен через FactoryMapSetup)
+            SetupMapFloorCollider(mapInstance);
+
+            return refs;
+        }
+
+        // --- Вспомогательные методы для BuildFromMap ---
+
+        static Transform FindDeepChild(Transform parent, string targetName)
+        {
+            foreach (Transform child in parent)
+            {
+                if (child.name == targetName) return child;
+                Transform res = FindDeepChild(child, targetName);
+                if (res != null) return res;
+            }
+            return null;
+        }
+
+        // Настройка материалов карты под текущий рендер-пайплайн (URP/Built-in) + Emission.
+        static void ConfigureMapMaterials(GameObject mapRoot)
+        {
+            Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
+            Shader hdrpLit = Shader.Find("HDRP/Lit");
+            Shader standard = Shader.Find("Standard");
+            Shader targetShader = urpLit != null ? urpLit : (hdrpLit != null ? hdrpLit : standard);
+
+            Renderer[] renderers = mapRoot.GetComponentsInChildren<Renderer>(true);
+            foreach (Renderer r in renderers)
+            {
+                Material[] mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    Material m = mats[i];
+                    if (m == null) continue;
+
+                    Color baseCol = m.HasProperty("_BaseColor") ? m.GetColor("_BaseColor") : (m.HasProperty("_Color") ? m.color : Color.gray);
+
+                    if (targetShader != null && m.shader != targetShader)
+                    {
+                        m.shader = targetShader;
+                    }
+
+                    if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", baseCol);
+                    if (m.HasProperty("_Color")) m.SetColor("_Color", baseCol);
+
+                    // Emission по имени материала
+                    string n = m.name;
+                    Color emColor = Color.black;
+                    float intensity = 0f;
+
+                    if (n.Contains("Mat_Glow_Skylight"))      { emColor = new Color(0.38f, 0.65f, 0.98f); intensity = 2.0f; }
+                    else if (n.Contains("Mat_Glow_WarmLamp")) { emColor = new Color(0.99f, 0.88f, 0.35f); intensity = 2.5f; }
+                    else if (n.Contains("Mat_Glow_Amber"))    { emColor = new Color(0.96f, 0.62f, 0.05f); intensity = 1.8f; }
+                    else if (n.Contains("Mat_Glow_Cyan"))     { emColor = new Color(0.08f, 0.78f, 0.88f); intensity = 1.8f; }
+                    else if (n.Contains("Mat_Glow_Purple"))   { emColor = new Color(0.68f, 0.35f, 0.97f); intensity = 1.8f; }
+                    else if (n.Contains("Mat_Glow_GreenLED")) { emColor = new Color(0.12f, 0.82f, 0.52f); intensity = 2.2f; }
+
+                    if (intensity > 0f)
+                    {
+                        m.EnableKeyword("_EMISSION");
+                        m.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                        if (m.HasProperty("_EmissionColor"))
+                        {
+                            m.SetColor("_EmissionColor", emColor * intensity);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Создаёт линию на заданной зоне (3 станции по X = -4, 0, +4 локально).
+        static LineView CreateLineOnZone(Transform root, Transform zone, int lineIndex, float[] stationX, HallRefs refs)
+        {
+            Color tone = LineColors[lineIndex];
+            ProductKind kind = (ProductKind)lineIndex;
+            var view = new LineView();
+
+            var row = new GameObject("Line " + (lineIndex + 1));
+            row.transform.SetParent(root, false);
+            // Позиция строки = позиция зоны в мире
+            row.transform.position = zone.position;
+            view.Root = row.transform;
+
+            CreateBay(row.transform, tone, 0.26f);
+
+            view.Stations = new Station[3];
+            view.Stations[0] = CreateBuyerOnZone(row.transform, new Vector3(stationX[0], 0f, 0f), tone, refs);
+            view.Stations[1] = CreateProducerOnZone(row.transform, new Vector3(stationX[1], 0f, 0f), tone, refs);
+            view.Stations[2] = CreateSellerOnZone(row.transform, new Vector3(stationX[2], 0f, 0f), tone, refs);
+
+            var empty = new GameObject("Empty " + (lineIndex + 1));
+            empty.transform.SetParent(root, false);
+            empty.transform.position = zone.position;
+            view.Empty = empty.transform;
+
+            CreateBay(empty.transform, tone, 0.14f, true);
+
+            view.Sign = CreateSign(root, lineIndex, zone.position.z);
+            CreateDefectMarker(row.transform, view, lineIndex);
+            return view;
+        }
+
+        // Создаёт станок закупщика на зоне.
+        static Station CreateBuyerOnZone(Transform root, Vector3 localPos, Color tone, HallRefs refs)
+        {
+            Station station = NewStation(root, "Buyer", localPos, tone);
+            CreatePad(station.Root, tone, 3.3f);
+
+            Spawn("machine", station.Root, new Vector3(-0.55f, 0f, 0.25f), 1.55f, 180f);
+            Spawn("hopper-square", station.Root, new Vector3(-0.55f, 1.4f, 0.25f), 1.1f, 180f);
+            Spawn("box-large", station.Root, new Vector3(0.95f, 0f, -0.55f), 0.52f, 20f);
+            Spawn("box-large", station.Root, new Vector3(1.28f, 0f, 0.05f), 0.46f, -12f);
+            Spawn("box-small", station.Root, new Vector3(0.95f, 0.52f, -0.55f), 0.30f, 35f);
+            SpawnEffect("__MoneyRain", station.Root, new Vector3(-0.58f, 2.36f, 0.22f), new Vector3(270f, 0f, 0f), refs);
+
+            station.Title = MakeLabel(station.Root, "ЗАКУПЩИК", new Vector3(0f, 4.36f, 0f), BuyerColor, 0.052f);
+            station.Info = MakeLabel(station.Root, "Lv 1", new Vector3(0f, 4.05f, 0f), MutedText, 0.034f);
+            station.ProgressFill = MakeProgress(station.Root, new Vector3(0f, 3.84f, 0f), 1.6f, BuyerColor);
+            return station;
+        }
+
+        // Создаёт станок производителя на зоне.
+        static Station CreateProducerOnZone(Transform root, Vector3 localPos, Color tone, HallRefs refs)
+        {
+            Station station = NewStation(root, "Producer", localPos, tone);
+            CreatePad(station.Root, tone, 3.3f);
+
+            Spawn("machine-fortified", station.Root, new Vector3(0.3f, 0f, 0.45f), 1.8f, 180f);
+            Spawn("hopper-square", station.Root, new Vector3(0.3f, 1.75f, 0.45f), 0.8f, 180f);
+
+            GameObject arm = Spawn("robot-arm-b", station.Root, new Vector3(-1.2f, 0f, -0.25f), 1.5f, 205f);
+            if (arm != null && arm.transform.childCount > 0) station.Spinners.Add(arm.transform.GetChild(0));
+
+            Spawn("box-large", station.Root, new Vector3(1.4f, 0f, -0.5f), 0.46f, 15f);
+            Spawn("box-small", station.Root, new Vector3(1.38f, 0.46f, -0.5f), 0.28f, -25f);
+            SpawnEffect("__Smoke", station.Root, new Vector3(0.25f, 2.5f, 0.22f), new Vector3(270f, 0f, 0f), refs);
+
+            station.Title = MakeLabel(station.Root, "ПРОИЗВОДИТЕЛЬ", new Vector3(0f, 4.36f, 0f), ProducerColor, 0.05f);
+            station.Info = MakeLabel(station.Root, "Lv 1", new Vector3(0f, 4.05f, 0f), MutedText, 0.034f);
+            station.ProgressFill = MakeProgress(station.Root, new Vector3(0f, 3.84f, 0f), 1.6f, ProducerColor);
+            return station;
+        }
+
+        // Создаёт станок продавца на зоне.
+        static Station CreateSellerOnZone(Transform root, Vector3 localPos, Color tone, HallRefs refs)
+        {
+            Station station = NewStation(root, "Seller", localPos, tone);
+            CreatePad(station.Root, tone, 3.3f);
+
+            Spawn("scanner-high", station.Root, new Vector3(-1.0f, 0f, 0.4f), 1.7f, 180f);
+            Spawn("screen-hanging-wide", station.Root, new Vector3(-1.0f, 1.85f, 1.0f), 0.78f, 0f);
+
+            Spawn("box-long", station.Root, new Vector3(0.55f, 0f, -0.5f), 0.5f, 0f);
+            Spawn("box-wide", station.Root, new Vector3(0.55f, 0.5f, -0.5f), 0.3f, 6f);
+            Spawn("box-small", station.Root, new Vector3(0.35f, 0.8f, -0.5f), 0.24f, -20f);
+
+            Spawn("box-large", station.Root, new Vector3(1.55f, 0f, 0.55f), 0.46f, -10f);
+            Spawn("box-small", station.Root, new Vector3(1.55f, 0.46f, 0.55f), 0.26f, 18f);
+            SpawnEffect("__GetMoney", station.Root, new Vector3(-0.4f, 0.75f, 0.22f), new Vector3(0f, 90f, 0f), refs);
+
+            station.Title = MakeLabel(station.Root, "ПРОДАВЕЦ", new Vector3(0f, 4.36f, 0f), SellerColor, 0.052f);
+            station.Info = MakeLabel(station.Root, "Lv 1", new Vector3(0f, 4.05f, 0f), MutedText, 0.034f);
+            station.ProgressFill = MakeProgress(station.Root, new Vector3(0f, 3.84f, 0f), 1.6f, SellerColor);
+            return station;
+        }
+
+        // Создаёт генератор на зоне.
+        static Station CreateGeneratorOnZone(Transform root, Transform zone, Vector3 localPos, int index)
+        {
+            Station station = NewStation(root, "Generator" + (index + 1), localPos, GeneratorColor);
+            station.Root.SetParent(zone, false); // привязываем к зоне
+            station.Root.localPosition = localPos;
+
+            Spawn("__generator", station.Root, new Vector3(0f, 0f, 0.2f), 2.5f, 270);
+            Spawn("warning-traffic", station.Root, new Vector3(-1.5f, 0f, -0.75f), 0.75f, 12f);
+
+            Transform big = CreateCog(station.Root, "cog-a", new Vector3(-0.125f, 0.625f, -1.05f), 1.6f, 0f);
+            if (big != null) station.Spinners.Add(big);
+            Transform small = CreateCog(station.Root, "cog-b", new Vector3(-0.125f, 0f, -1.25f), 0.85f, 0);
+            if (small != null) station.Spinners.Add(small);
+
+            station.Title = MakeLabel(station.Root, "ГЕНЕРАТОР " + (index + 1), new Vector3(0f, 3.78f, 0f), GeneratorColor, 0.052f);
+            station.Info = MakeLabel(station.Root, "4 энергии", new Vector3(0f, 3.44f, 0f), MutedText, 0.033f);
+            return station;
+        }
+
+        // Создаёт сборку на зоне.
+        static Station CreateAssemblyOnZone(Transform root, Transform zone, Vector3 localPos, int index)
+        {
+            Recipe recipe = Recipes.All[index];
+            Station station = NewStation(root, "Assembly " + recipe.Name, localPos, AssemblyColor);
+            station.Root.SetParent(zone, false);
+            station.Root.localPosition = localPos;
+
+            CreatePad(station.Root, AssemblyColor, 3.2f);
+
+            Spawn("machine-fortified", station.Root, new Vector3(0f, 0f, 0.1f), 1.75f, 180f);
+            Spawn("hopper-square", station.Root, new Vector3(0f, 1.72f, 0.1f), 0.72f, 180f);
+
+            GameObject arm = Spawn("robot-arm-b", station.Root, new Vector3(-1.35f, 0f, -0.35f), 1.35f, 205f);
+            if (arm != null && arm.transform.childCount > 0) station.Spinners.Add(arm.transform.GetChild(0));
+
+            Spawn("box-large", station.Root, new Vector3(1.25f, 0f, -0.5f), 0.42f, 18f);
+            Spawn("box-small", station.Root, new Vector3(1.23f, 0.42f, -0.5f), 0.24f, -20f);
+
+            if (index == Recipes.All.Length - 1)
+                Spawn("box-long", station.Root, new Vector3(1.35f, 0f, 0.35f), 0.36f, 74f);
+
+            station.Title = MakeLabel(station.Root, "СБОРКА · " + recipe.Name.ToUpper(),
+                new Vector3(0f, 4.14f, 0f), AssemblyColor, 0.036f);
+            station.Info = MakeLabel(station.Root, "НЕ ПОСТРОЕНА · $" + recipe.BuildCost,
+                new Vector3(0f, 3.82f, 0f), MutedText, 0.032f);
+            station.ProgressFill = MakeProgress(station.Root, new Vector3(0f, 3.60f, 0f), 1.6f, AssemblyColor);
+            return station;
+        }
+
+        // Коллайдер пола для рейкастов (клики по браку).
+        static void SetupMapFloorCollider(GameObject mapRoot)
+        {
+            BoxCollider col = mapRoot.GetComponent<BoxCollider>();
+            if (col == null) col = mapRoot.AddComponent<BoxCollider>();
+            // Пол в модели на Y=0, плита до -0.65. Коллайдер чуть ниже поверхности.
+            col.center = new Vector3(0f, -0.25f, 0f);
+            // Размер под внутреннюю сетку 13x9 клеток * 2.0 = 26x18, с запасом
+            col.size = new Vector3(28f, 0.5f, 20f);
         }
 
         // Центрируем три линии вокруг нуля: -6.2 / 0 / +6.2.
