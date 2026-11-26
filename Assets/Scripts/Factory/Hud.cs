@@ -2161,6 +2161,7 @@ namespace Game.Factory
             if (sim != null)
             {
                 sim.TutorialMode = false;
+                sim.Paused = false;
                 sim.ClearTutorialDefects();
                 sim.SetEvent("Обучение пройдено: пауза, брак, улучшение, сборка и новая линия — ты готов", EventTone.Good);
             }
