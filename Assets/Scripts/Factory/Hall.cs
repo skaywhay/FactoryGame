@@ -848,8 +848,7 @@ namespace Game.Factory
 
             sign.Title = MakeLabel(sign.Root, ProductInfo.Name(kind).ToUpper(), new Vector3(0f, 2.14f, 0.062f),
                 Color.Lerp(tone, Color.white, 0.34f), 0.062f);
-            sign.Info = MakeLabel(sign.Root, "НЕ ПОСТРОЕНА · $" + ProductInfo.BuildCost(kind),
-                new Vector3(0f, 1.67f, 0.062f), new Color(0.94f, 0.96f, 0.99f), 0.036f);
+            // Info label removed - only name remains
             return sign;
         }
 
