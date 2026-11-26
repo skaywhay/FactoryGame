@@ -4,6 +4,9 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
+// Audio settings fix: SFX volume now functional, duplicate AudioListener removed
+// v2: Fixed ScrollRect.content assignment - settings sliders now appear
+
 namespace Game.Factory
 {
     /// <summary>
@@ -114,6 +117,8 @@ namespace Game.Factory
         GameObject _settingsContent;
         Slider _musicSlider;
         Text _musicVolumeText;
+        Slider _sfxSlider;
+        Text _sfxVolumeText;
 
         const string TutorialDoneKey = "factory_tutorial_done";
 
@@ -963,6 +968,9 @@ namespace Game.Factory
             ContentSizeFitter fitter = _settingsContent.AddComponent<ContentSizeFitter>();
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
+            // IMPORTANT: ScrollRect needs content assigned
+            scrollRect.content = contentRect;
+
             // Build setting sections
             BuildAudioSection(_settingsContent.transform);
             BuildGraphicsSection(_settingsContent.transform);
@@ -988,13 +996,18 @@ namespace Game.Factory
                 },
                 out _musicSlider, out _musicVolumeText);
 
-            // SFX volume (placeholder for future)
+            // SFX volume
             CreateSliderSetting(section.transform, "Громкость эффектов", "SfxVolume", 0.7f,
                 value => {
+                    if (_sfxVolumeText != null) _sfxVolumeText.text = Mathf.RoundToInt(value * 100f) + "%";
+                    if (_game.Sim != null && _game.Sim.SfxSource != null)
+                        _game.Sim.SfxSource.volume = value;
+                    else if (_game != null && _game.SfxSource != null)
+                        _game.SfxSource.volume = value;
                     PlayerPrefs.SetFloat("SfxVolume", value);
                     PlayerPrefs.Save();
                 },
-                out _, out _);
+                out _sfxSlider, out _sfxVolumeText);
         }
 
         void BuildGraphicsSection(Transform parent)
@@ -1058,8 +1071,22 @@ namespace Game.Factory
                     PlayerPrefs.Save();
                     // Reset UI to defaults
                     if (_musicSlider != null) _musicSlider.value = 0.5f;
+                    if (_musicVolumeText != null) _musicVolumeText.text = "50%";
+                    if (_sfxSlider != null) _sfxSlider.value = 0.7f;
+                    if (_sfxVolumeText != null) _sfxVolumeText.text = "70%";
                     PlayerPrefs.SetFloat("MusicVolume", 0.5f);
                     PlayerPrefs.SetFloat("SfxVolume", 0.7f);
+                    if (_game.Sim != null)
+                    {
+                        if (_game.Sim.MusicSource != null) _game.Sim.MusicSource.volume = 0.5f;
+                        if (_game.Sim.SfxSource != null) _game.Sim.SfxSource.volume = 0.7f;
+                    }
+                    // Also apply directly to FactoryGame's AudioSources
+                    if (_game != null)
+                    {
+                        if (_game.MusicSource != null) _game.MusicSource.volume = 0.5f;
+                        if (_game.SfxSource != null) _game.SfxSource.volume = 0.7f;
+                    }
                     PlayerPrefs.SetInt("ParticlesEnabled", 1);
                     PlayerPrefs.SetInt("GraphicsQuality", 2);
                     PlayerPrefs.SetInt("VSync", 1);
@@ -1087,13 +1114,19 @@ namespace Game.Factory
             sr.anchorMax = new Vector2(1f, 1f);
             sr.pivot = new Vector2(0.5f, 1f);
             sr.anchoredPosition = new Vector2(0f, 0f);
-            sr.sizeDelta = new Vector2(0f, 40f);
+            sr.sizeDelta = new Vector2(0f, 0f); // Height will be controlled by layout group
 
             VerticalLayoutGroup vlg = section.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(0, 0, 0, 8);
             vlg.spacing = 10f;
             vlg.childControlWidth = true;
             vlg.childForceExpandWidth = true;
+            vlg.childControlHeight = true; // IMPORTANT: Let section expand to fit children
+            vlg.childForceExpandHeight = false;
+
+            // Also add ContentSizeFitter so parent (SettingsContent) can get preferred height
+            ContentSizeFitter fitter = section.AddComponent<ContentSizeFitter>();
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // Section title
             Text sectionTitle = NewText(section.transform, "SectionTitle_" + title, title, 13, AccentAmber, TextAnchor.MiddleLeft);
@@ -1101,9 +1134,12 @@ namespace Game.Factory
             str.anchorMin = new Vector2(0f, 1f);
             str.anchorMax = new Vector2(1f, 1f);
             str.pivot = new Vector2(0f, 1f);
-            str.anchoredPosition = new Vector2(0f, 0f);
+            str.anchoredPosition = Vector2.zero;
             str.sizeDelta = new Vector2(0f, 22f);
             sectionTitle.fontStyle = FontStyle.Bold;
+            // Add LayoutElement so layout group knows its height
+            LayoutElement titleLayout = sectionTitle.gameObject.AddComponent<LayoutElement>();
+            titleLayout.preferredHeight = 22f;
 
             // Separator
             GameObject sep = NewRect(section.transform, "Separator").gameObject;
@@ -1116,6 +1152,8 @@ namespace Game.Factory
             Image sepImg = sep.AddComponent<Image>();
             sepImg.color = new Color(1f, 1f, 1f, 0.08f);
             sepImg.raycastTarget = false;
+            LayoutElement sepLayout = sep.AddComponent<LayoutElement>();
+            sepLayout.preferredHeight = 1f;
 
             return section;
         }
@@ -1130,9 +1168,17 @@ namespace Game.Factory
             r.pivot = new Vector2(0.5f, 1f);
             r.sizeDelta = new Vector2(0f, 48f);
 
+            // IMPORTANT: Add LayoutElement so parent VerticalLayoutGroup knows our height
+            LayoutElement settingLayout = setting.AddComponent<LayoutElement>();
+            settingLayout.preferredHeight = 48f;
+
             VerticalLayoutGroup vlg = setting.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(0, 0, 0, 0);
             vlg.spacing = 4f;
+            vlg.childControlWidth = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childControlHeight = false;
+            vlg.childForceExpandHeight = false;
 
             // Label + value
             GameObject labelRow = NewRect(setting.transform, "LabelRow").gameObject;
@@ -1141,6 +1187,8 @@ namespace Game.Factory
             lr.anchorMax = new Vector2(1f, 1f);
             lr.pivot = new Vector2(0.5f, 1f);
             lr.sizeDelta = new Vector2(0f, 20f);
+            LayoutElement lrLayout = labelRow.AddComponent<LayoutElement>();
+            lrLayout.preferredHeight = 20f;
 
             HorizontalLayoutGroup hl = labelRow.AddComponent<HorizontalLayoutGroup>();
             hl.childForceExpandWidth = true;
@@ -1155,6 +1203,8 @@ namespace Game.Factory
             sr.anchorMax = new Vector2(1f, 1f);
             sr.pivot = new Vector2(0.5f, 1f);
             sr.sizeDelta = new Vector2(0f, 24f);
+            LayoutElement sliderLayout = sr.gameObject.AddComponent<LayoutElement>();
+            sliderLayout.preferredHeight = 24f;
 
             // Background
             GameObject bg = NewRect(sr, "Background").gameObject;
@@ -1202,6 +1252,10 @@ namespace Game.Factory
             r.pivot = new Vector2(0.5f, 1f);
             r.sizeDelta = new Vector2(0f, 36f);
 
+            // IMPORTANT: Add LayoutElement so parent VerticalLayoutGroup knows our height
+            LayoutElement settingLayout = setting.AddComponent<LayoutElement>();
+            settingLayout.preferredHeight = 36f;
+
             HorizontalLayoutGroup hl = setting.AddComponent<HorizontalLayoutGroup>();
             hl.childForceExpandWidth = true;
 
@@ -1242,11 +1296,21 @@ namespace Game.Factory
             r.pivot = new Vector2(0.5f, 1f);
             r.sizeDelta = new Vector2(0f, 40f);
 
+            // IMPORTANT: Add LayoutElement so parent VerticalLayoutGroup knows our height
+            LayoutElement settingLayout = setting.AddComponent<LayoutElement>();
+            settingLayout.preferredHeight = 40f;
+
             VerticalLayoutGroup vlg = setting.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(0, 0, 0, 0);
             vlg.spacing = 4f;
+            vlg.childControlWidth = true;
+            vlg.childForceExpandWidth = true;
 
             Text labelText = NewText(setting.transform, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
+            RectTransform ltr = labelText.rectTransform;
+            ltr.sizeDelta = new Vector2(0f, 20f);
+            LayoutElement labelLayout = labelText.gameObject.AddComponent<LayoutElement>();
+            labelLayout.preferredHeight = 20f;
 
             Dropdown dropdown = NewRect(setting.transform, "Dropdown").gameObject.AddComponent<Dropdown>();
             RectTransform dr = dropdown.GetComponent<RectTransform>();
@@ -1254,6 +1318,8 @@ namespace Game.Factory
             dr.anchorMax = new Vector2(1f, 1f);
             dr.pivot = new Vector2(0.5f, 1f);
             dr.sizeDelta = new Vector2(0f, 32f);
+            LayoutElement dropdownLayout = dr.gameObject.AddComponent<LayoutElement>();
+            dropdownLayout.preferredHeight = 32f;
 
             Image bg = dr.gameObject.AddComponent<Image>();
             bg.sprite = _sprBtnNeutral;
@@ -1278,10 +1344,16 @@ namespace Game.Factory
             r.pivot = new Vector2(0.5f, 1f);
             r.sizeDelta = new Vector2(0f, 40f);
 
+            // IMPORTANT: Add LayoutElement so parent VerticalLayoutGroup knows our height
+            LayoutElement settingLayout = setting.AddComponent<LayoutElement>();
+            settingLayout.preferredHeight = 40f;
+
             HorizontalLayoutGroup hl = setting.AddComponent<HorizontalLayoutGroup>();
             hl.childForceExpandWidth = true;
 
             Text labelText = NewText(setting.transform, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
+            RectTransform ltr = labelText.rectTransform;
+            ltr.sizeDelta = new Vector2(0f, 40f);
 
             Button btn = NewRect(setting.transform, "Button").gameObject.AddComponent<Button>();
             RectTransform br = btn.GetComponent<RectTransform>();
@@ -1306,6 +1378,35 @@ namespace Game.Factory
             // Закрываем другие модалки
             if (_tutorial != null && _tutorial.activeSelf) CloseTutorial();
             if (_table != null && _table.activeSelf) ToggleTable();
+            // Refresh slider values from PlayerPrefs
+            RefreshSettingsSliders();
+            // Force layout rebuild for settings content
+            if (_settingsContent != null)
+            {
+                Canvas.ForceUpdateCanvases();
+                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_settingsContent.GetComponent<RectTransform>());
+                var scrollRect = _settings.GetComponentInChildren<ScrollRect>();
+                if (scrollRect != null)
+                {
+                    UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
+                }
+            }
+        }
+
+        void RefreshSettingsSliders()
+        {
+            if (_musicSlider != null)
+            {
+                _musicSlider.value = PlayerPrefs.GetFloat("MusicVolume", 0.5f);
+                if (_musicVolumeText != null)
+                    _musicVolumeText.text = Mathf.RoundToInt(_musicSlider.value * 100f) + "%";
+            }
+            if (_sfxSlider != null)
+            {
+                _sfxSlider.value = PlayerPrefs.GetFloat("SfxVolume", 0.7f);
+                if (_sfxVolumeText != null)
+                    _sfxVolumeText.text = Mathf.RoundToInt(_sfxSlider.value * 100f) + "%";
+            }
         }
 
         void CloseSettings()
@@ -1336,7 +1437,10 @@ namespace Game.Factory
 
         void OnDefectClicked()
         {
-            if (_defectLine >= 0) _game.Sim.FixDefect(_defectLine);
+            if (_defectLine >= 0 && _game.Sim.FixDefect(_defectLine))
+            {
+                _game.PlaySfx(_game.SfxDefectFix);
+            }
         }
 
         public void ToggleTutorial()

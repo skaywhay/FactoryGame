@@ -1080,7 +1080,7 @@ namespace Game.Factory
                 var go = new GameObject("Main Camera");
                 go.tag = "MainCamera";
                 camera = go.AddComponent<Camera>();
-                go.AddComponent<AudioListener>();
+                go.AddComponent<AudioListener>(); // Нужен в Play mode
             }
 
             camera.transform.SetParent(root, false);

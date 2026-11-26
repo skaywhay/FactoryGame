@@ -167,6 +167,9 @@ namespace Game.Factory
         // Фоновая музыка
         public AudioSource MusicSource;
 
+        // SFX для звуковых эффектов
+        public AudioSource SfxSource;
+
         // Брак на конвейере. Красная деталь висит на складе линии,
         // её надо успеть убрать кликом. 12 секунд — это нормально:
         // можно отвлечься на карточку, но и не «пропустил за 2 секунды».
@@ -1097,6 +1100,15 @@ namespace Game.Factory
             LastTone = tone;
             Log.Add(text);
             while (Log.Count > 6) Log.RemoveAt(0);
+        }
+
+        // Воспроизведение звукового эффекта
+        public void PlaySfx(AudioClip clip, float volumeScale = 1f)
+        {
+            if (SfxSource != null && clip != null)
+            {
+                SfxSource.PlayOneShot(clip, volumeScale);
+            }
         }
     }
 

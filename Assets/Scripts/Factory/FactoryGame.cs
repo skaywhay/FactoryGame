@@ -14,7 +14,12 @@ namespace Game.Factory
         HallRefs _hall;
         Hud _hud;
         bool _wasPaused;
-        AudioSource _musicSource;
+        public AudioSource MusicSource { get; private set; }
+        public AudioSource SfxSource { get; private set; }
+        public AudioClip SfxBuild;
+        public AudioClip SfxUpgrade;
+        public AudioClip SfxDefectFix;
+        public AudioClip SfxError;
 
         void Awake()
         {
@@ -44,18 +49,18 @@ namespace Game.Factory
             }
 
             // Background music
-            if (_musicSource == null)
+            if (MusicSource == null)
             {
-                _musicSource = gameObject.AddComponent<AudioSource>();
-                _musicSource.playOnAwake = true;
-                _musicSource.loop = true;
-                _musicSource.spatialBlend = 0f; // 2D sound
+                MusicSource = gameObject.AddComponent<AudioSource>();
+                MusicSource.playOnAwake = true;
+                MusicSource.loop = true;
+                MusicSource.spatialBlend = 0f; // 2D sound
                 var clip = Resources.Load<AudioClip>("Audio/background_music");
                 if (clip != null)
                 {
-                    _musicSource.clip = clip;
-                    _musicSource.volume = PlayerPrefs.GetFloat("MusicVolume", 0.5f);
-                    _musicSource.Play();
+                    MusicSource.clip = clip;
+                    MusicSource.volume = PlayerPrefs.GetFloat("MusicVolume", 0.5f);
+                    MusicSource.Play();
                 }
                 else
                 {
@@ -63,8 +68,25 @@ namespace Game.Factory
                 }
             }
 
+            // SFX AudioSource for sound effects
+            if (SfxSource == null)
+            {
+                SfxSource = gameObject.AddComponent<AudioSource>();
+                SfxSource.playOnAwake = false;
+                SfxSource.loop = false;
+                SfxSource.spatialBlend = 0f; // 2D sound
+                SfxSource.volume = PlayerPrefs.GetFloat("SfxVolume", 0.7f);
+            }
+
+            // Load SFX clips
+            SfxBuild = Resources.Load<AudioClip>("Audio/sfx_build");
+            SfxUpgrade = Resources.Load<AudioClip>("Audio/sfx_upgrade");
+            SfxDefectFix = Resources.Load<AudioClip>("Audio/sfx_defect_fix");
+            SfxError = Resources.Load<AudioClip>("Audio/sfx_error");
+
             // Expose music source to sim for volume control
-            Sim.MusicSource = _musicSource;
+            Sim.MusicSource = MusicSource;
+            Sim.SfxSource = SfxSource;
         }
 
         // Порядок как в симуляции: сначала считаем экономику, потом
@@ -81,10 +103,10 @@ namespace Game.Factory
             bool paused = Sim.Paused || _hud.TutorialOpen;
 
             // Пауза музыки вместе с игрой
-            if (_musicSource != null)
+            if (MusicSource != null)
             {
-                if (paused && _musicSource.isPlaying) _musicSource.Pause();
-                else if (!paused && !_musicSource.isPlaying) _musicSource.UnPause();
+                if (paused && MusicSource.isPlaying) MusicSource.Pause();
+                else if (!paused && !MusicSource.isPlaying) MusicSource.UnPause();
             }
 
             float dt = Time.deltaTime;
@@ -108,28 +130,31 @@ namespace Game.Factory
             if (!Physics.Raycast(ray, out hit, 200f)) return;
 
             DefectMarker marker = hit.collider.GetComponentInParent<DefectMarker>();
-            if (marker != null) Sim.FixDefect(marker.Line);
+            if (marker != null && Sim.FixDefect(marker.Line)) PlaySfx(SfxDefectFix);
         }
 
         public void UpgradeMachine(int line, MachineKind kind)
         {
             UpgradeStatus status = Sim.TryUpgradeMachine(line, kind);
-            if (status == UpgradeStatus.NotEnoughEnergy) Sim.SetEvent("Сначала нужно больше энергии", EventTone.Bad);
-            else if (status == UpgradeStatus.NotEnoughMoney) Sim.SetEvent("Не хватает денег на улучшение", EventTone.Bad);
-            else if (status == UpgradeStatus.NotBuilt) Sim.SetEvent("Линия ещё не построена", EventTone.Bad);
+            if (status == UpgradeStatus.NotEnoughEnergy) { Sim.SetEvent("Сначала нужно больше энергии", EventTone.Bad); PlaySfx(SfxError); }
+            else if (status == UpgradeStatus.NotEnoughMoney) { Sim.SetEvent("Не хватает денег на улучшение", EventTone.Bad); PlaySfx(SfxError); }
+            else if (status == UpgradeStatus.NotBuilt) { Sim.SetEvent("Линия ещё не построена", EventTone.Bad); PlaySfx(SfxError); }
+            else if (status == UpgradeStatus.Ok) PlaySfx(SfxUpgrade);
         }
 
         public void UpgradeGenerator(int index)
         {
             UpgradeStatus status = Sim.TryUpgradeGenerator(index);
-            if (status == UpgradeStatus.NotEnoughMoney) Sim.SetEvent("Не хватает денег на улучшение генератора", EventTone.Bad);
+            if (status == UpgradeStatus.NotEnoughMoney) { Sim.SetEvent("Не хватает денег на улучшение генератора", EventTone.Bad); PlaySfx(SfxError); }
+            else if (status == UpgradeStatus.Ok) PlaySfx(SfxUpgrade);
         }
 
         public void BuildLine(int index)
         {
             UpgradeStatus status = Sim.TryBuildLine(index);
-            if (status == UpgradeStatus.NotEnoughMoney) Sim.SetEvent("Не хватает денег на новую линию", EventTone.Bad);
-            else if (status == UpgradeStatus.NotEnoughEnergy) Sim.SetEvent("Для линии не хватает энергии", EventTone.Bad);
+            if (status == UpgradeStatus.NotEnoughMoney) { Sim.SetEvent("Не хватает денег на новую линию", EventTone.Bad); PlaySfx(SfxError); }
+            else if (status == UpgradeStatus.NotEnoughEnergy) { Sim.SetEvent("Для линии не хватает энергии", EventTone.Bad); PlaySfx(SfxError); }
+            else if (status == UpgradeStatus.Ok) PlaySfx(SfxBuild);
         }
 
         // Кнопка на карточке сборки: если пост уже стоит — качаем, иначе строим.
@@ -140,8 +165,9 @@ namespace Game.Factory
                 ? Sim.TryUpgradeAssembly(index)
                 : Sim.TryBuildAssembly(index);
 
-            if (status == UpgradeStatus.NotEnoughMoney) Sim.SetEvent("Не хватает денег на сборку", EventTone.Bad);
-            else if (status == UpgradeStatus.NotEnoughEnergy) Sim.SetEvent("Сначала нужно больше энергии", EventTone.Bad);
+            if (status == UpgradeStatus.NotEnoughMoney) { Sim.SetEvent("Не хватает денег на сборку", EventTone.Bad); PlaySfx(SfxError); }
+            else if (status == UpgradeStatus.NotEnoughEnergy) { Sim.SetEvent("Сначала нужно больше энергии", EventTone.Bad); PlaySfx(SfxError); }
+            else if (status == UpgradeStatus.Ok) PlaySfx(SfxBuild);
         }
 
         // debug: DebugAssembly(0..2) — строит/качает сборку без похода в UI
@@ -187,6 +213,15 @@ namespace Game.Factory
         public void Restart()
         {
             UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+        }
+
+        // Воспроизведение звукового эффекта
+        public void PlaySfx(AudioClip clip, float volumeScale = 1f)
+        {
+            if (SfxSource != null && clip != null)
+            {
+                SfxSource.PlayOneShot(clip, volumeScale);
+            }
         }
 
         public void DebugAddMoney(float amount)
