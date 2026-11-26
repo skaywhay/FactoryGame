@@ -971,8 +971,6 @@ namespace Game.Factory
             _settings.SetActive(false);
         }
 
-        GameObject _settingsContent;
-
         void BuildAudioSection(Transform parent)
         {
             // Section header
