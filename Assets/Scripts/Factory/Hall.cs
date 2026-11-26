@@ -409,7 +409,7 @@ namespace Game.Factory
             station.Root.SetParent(zone, false); // привязываем к зоне
             station.Root.localPosition = localPos;
 
-            Spawn("__generator", station.Root, new Vector3(0f, 0f, 0.2f), 2.5f, 270);
+            Spawn("__generator", station.Root, new Vector3(0f, 0f, 0.2f), 2.5f, 90);
             Spawn("warning-traffic", station.Root, new Vector3(-1.5f, 0f, -0.75f), 0.75f, 12f);
 
             Transform big = CreateCog(station.Root, "cog-a", new Vector3(-0.125f, 0.625f, -1.05f), 1.6f, 0f);
