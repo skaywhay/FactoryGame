@@ -79,10 +79,10 @@ namespace Game.Factory
             new Color(0.72f, 0.56f, 0.98f)
         };
 
-        // Камера смотрит прямо (сверху вниз по Z), без бокового угла.
-        // Центр карты ~(0,0,0), линии Z≈-4..+1, сборка X≈-5.5 (после поворота 180°).
-        static readonly Vector3 CameraPos = new Vector3(0f, 30f, -25f);
+        // Камера: позиция и цель из Play Mode.
+        static readonly Vector3 CameraPos = new Vector3(-1.20448f, 19.33295f, -13.37823f);
         static readonly Vector3 CameraTarget = new Vector3(0f, 0f, -2f);
+        static readonly Vector3 CameraEuler = new Vector3(53.664f, 0.204f, -0.004f);
 
         // Собираем зал в фиксированном порядке: свет -> пол -> стены -> декор ->
         // линии -> генераторы -> сборка -> камера. Камера последняя, чтобы
@@ -412,10 +412,14 @@ namespace Game.Factory
             Spawn("__generator", station.Root, new Vector3(0f, 0f, 0.2f), 2.5f, 180);
             Spawn("warning-traffic", station.Root, new Vector3(-1.5f, 0f, -0.75f), 0.75f, 12f);
 
-            // Две шестерёнки, каждая со своим pivot (как было раньше).
-            Transform big = CreateCog(station.Root, "cog-a", new Vector3(-0.125f, 0.625f, -1.05f), 1.6f, 0f);
+            // Позиции шестерёнок под каждый генератор (Y взяты из Play Mode).
+            // index 0 = Генератор 1, index 1 = Генератор 2.
+            float bigY = (index == 0) ? 2.336f : 2.316f;
+            float smallY = (index == 0) ? 2.313f : 2.293f;
+
+            Transform big = CreateCog(station.Root, "cog-a", new Vector3(-0.125f, bigY, -1.05f), 1.6f, 0f);
             if (big != null) station.Spinners.Add(big);
-            Transform small = CreateCog(station.Root, "cog-b", new Vector3(-0.125f, 0f, -1.25f), 0.85f, 0);
+            Transform small = CreateCog(station.Root, "cog-b", new Vector3(-0.125f, smallY, -1.25f), 0.85f, 0);
             if (small != null) station.Spinners.Add(small);
 
             station.Title = MakeLabel(station.Root, "ГЕНЕРАТОР " + (index + 1), new Vector3(0f, 3.78f, 0f), GeneratorColor, 0.052f);
@@ -1086,7 +1090,7 @@ namespace Game.Factory
 
             camera.transform.SetParent(root, false);
             camera.transform.position = CameraPos;
-            camera.transform.LookAt(CameraTarget);
+            camera.transform.rotation = Quaternion.Euler(CameraEuler);
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = new Color(0.05f, 0.06f, 0.09f);
             camera.fieldOfView = 42f;
