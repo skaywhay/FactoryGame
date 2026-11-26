@@ -245,6 +245,62 @@ namespace Game.Factory
             return Sprite.Create(pTex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(l, b, r, t));
         }
 
+        // ------------------------------------------------------------- Soft shapes
+        static readonly Dictionary<string, Sprite> _softShapeCache = new Dictionary<string, Sprite>();
+
+        // Мягкая фигура с антиалиасингом: круг или скруглённая плашка.
+        // LoadSprite при отсутствии PNG рисует прямоугольник с рамкой 1px,
+        // поэтому мелкие круглые элементы (бегунок слайдера, ручка тумблера)
+        // собираем процедурно, а не единым спрайтом из кнопки.
+        public static Sprite SoftShape(string name, int size, float radiusPx, Color fill, Color stroke, float strokePx)
+        {
+            Sprite cached;
+            if (_softShapeCache.TryGetValue(name, out cached)) return cached;
+
+            int s = Mathf.Clamp(size, 8, 128);
+            float radius = Mathf.Clamp(radiusPx, 0.5f, s * 0.5f);
+            const float feather = 1f; // один пиксель сглаживания на краю
+
+            Texture2D tex = new Texture2D(s, s, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+
+            Color[] cols = new Color[s * s];
+            float center = (s - 1) * 0.5f;
+            float box = Mathf.Max(0f, center - radius); // скругление только в углах
+
+            for (int y = 0; y < s; y++)
+            {
+                for (int x = 0; x < s; x++)
+                {
+                    float qx = Mathf.Max(Mathf.Abs(x - center) - box, 0f);
+                    float qy = Mathf.Max(Mathf.Abs(y - center) - box, 0f);
+                    float d = Mathf.Sqrt(qx * qx + qy * qy);
+                    if (d >= radius + feather) { cols[y * s + x] = Color.clear; continue; }
+
+                    Color c = fill;
+                    if (strokePx > 0.01f)
+                    {
+                        float t = Mathf.Clamp01((d - (radius - strokePx)) / strokePx);
+                        c = Color.Lerp(fill, stroke, t);
+                    }
+
+                    c.a *= Mathf.Clamp01(radius + feather - d);
+                    cols[y * s + x] = c;
+                }
+            }
+
+            tex.SetPixels(cols);
+            tex.Apply();
+
+            float border = strokePx > 0.01f ? strokePx : 1f;
+            Sprite sp = Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect,
+                new Vector4(border, border, border, border));
+            sp.name = name;
+            _softShapeCache[name] = sp;
+            return sp;
+        }
+
         static Font LoadFont()
         {
             Font font = Resources.Load<Font>("UI/Fonts/Bahnschrift");
