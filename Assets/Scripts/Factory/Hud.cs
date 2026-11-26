@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -963,10 +964,10 @@ namespace Game.Factory
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // Build setting sections
-            BuildAudioSection(_settingsContent);
-            BuildGraphicsSection(_settingsContent);
-            BuildGameplaySection(_settingsContent);
-            BuildOtherSection(_settingsContent);
+            BuildAudioSection(_settingsContent.transform);
+            BuildGraphicsSection(_settingsContent.transform);
+            BuildGameplaySection(_settingsContent.transform);
+            BuildOtherSection(_settingsContent.transform);
 
             _settings.SetActive(false);
         }
