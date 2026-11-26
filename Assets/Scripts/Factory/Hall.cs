@@ -323,9 +323,9 @@ namespace Game.Factory
             CreateBay(lineRoot.transform, tone, 0.26f);
 
             view.Stations = new Station[3];
-            view.Stations[0] = CreateBuyerOnZone(lineRoot.transform, new Vector3(stationX[0], 0f, 0f), tone, refs);
+            view.Stations[0] = CreateBuyerOnZone(lineRoot.transform, new Vector3(stationX[2], 0f, 0f), tone, refs);
             view.Stations[1] = CreateProducerOnZone(lineRoot.transform, new Vector3(stationX[1], 0f, 0f), tone, refs);
-            view.Stations[2] = CreateSellerOnZone(lineRoot.transform, new Vector3(stationX[2], 0f, 0f), tone, refs);
+            view.Stations[2] = CreateSellerOnZone(lineRoot.transform, new Vector3(stationX[0], 0f, 0f), tone, refs);
 
             var empty = new GameObject("Empty " + (lineIndex + 1));
             empty.transform.SetParent(zone, false);
@@ -345,8 +345,8 @@ namespace Game.Factory
             Station station = NewStation(root, "Buyer", localPos, tone);
             CreatePad(station.Root, tone, 3.3f);
 
-            Spawn("machine", station.Root, new Vector3(-0.55f, 0f, 0.25f), 1.55f, 180f);
-            Spawn("hopper-square", station.Root, new Vector3(-0.55f, 1.4f, 0.25f), 1.1f, 180f);
+            Spawn("machine", station.Root, new Vector3(-0.55f, 0f, 0f), 1.55f, 0f);
+            Spawn("hopper-square", station.Root, new Vector3(-0.55f, 1.4f, 0.25f), 1.1f, 0f);
             Spawn("box-large", station.Root, new Vector3(0.95f, 0f, -0.55f), 0.52f, 20f);
             Spawn("box-large", station.Root, new Vector3(1.28f, 0f, 0.05f), 0.46f, -12f);
             Spawn("box-small", station.Root, new Vector3(0.95f, 0.52f, -0.55f), 0.30f, 35f);
@@ -364,7 +364,7 @@ namespace Game.Factory
             Station station = NewStation(root, "Producer", localPos, tone);
             CreatePad(station.Root, tone, 3.3f);
 
-            Spawn("machine-fortified", station.Root, new Vector3(0.3f, 0f, 0.45f), 1.8f, 180f);
+            Spawn("machine-fortified", station.Root, new Vector3(0f, 0f, 0f), 1.8f, 180f);
             Spawn("hopper-square", station.Root, new Vector3(0.3f, 1.75f, 0.45f), 0.8f, 180f);
 
             GameObject arm = Spawn("robot-arm-b", station.Root, new Vector3(-1.2f, 0f, -0.25f), 1.5f, 205f);
@@ -386,8 +386,7 @@ namespace Game.Factory
             Station station = NewStation(root, "Seller", localPos, tone);
             CreatePad(station.Root, tone, 3.3f);
 
-            Spawn("scanner-high", station.Root, new Vector3(-1.0f, 0f, 0.4f), 1.7f, 180f);
-            Spawn("screen-hanging-wide", station.Root, new Vector3(-1.0f, 1.85f, 1.0f), 0.78f, 0f);
+            Spawn("scanner-high", station.Root, new Vector3(-0.5f, 0f, 0f), 1.7f, 0f);
 
             Spawn("box-long", station.Root, new Vector3(0.55f, 0f, -0.5f), 0.5f, 0f);
             Spawn("box-wide", station.Root, new Vector3(0.55f, 0.5f, -0.5f), 0.3f, 6f);
@@ -395,7 +394,7 @@ namespace Game.Factory
 
             Spawn("box-large", station.Root, new Vector3(1.55f, 0f, 0.55f), 0.46f, -10f);
             Spawn("box-small", station.Root, new Vector3(1.55f, 0.46f, 0.55f), 0.26f, 18f);
-            SpawnEffect("__GetMoney", station.Root, new Vector3(-0.4f, 0.75f, 0.22f), new Vector3(0f, 90f, 0f), refs);
+            SpawnEffect("__GetMoney", station.Root, new Vector3(-0.5f, 0.75f, 0.22f), new Vector3(0f, 270f, 0f), refs);
 
             station.Title = MakeLabel(station.Root, "ПРОДАВЕЦ", new Vector3(0f, 4.36f, 0f), SellerColor, 0.052f);
             station.Info = MakeLabel(station.Root, "Lv 1", new Vector3(0f, 4.05f, 0f), MutedText, 0.034f);
@@ -795,7 +794,7 @@ namespace Game.Factory
         {
             var marker = new GameObject("Defect " + (index + 1));
             marker.transform.SetParent(parent, false);
-            marker.transform.localPosition = new Vector3(5.3f, 2.35f, 0.55f);
+            marker.transform.localPosition = new Vector3(-4.75f, 2.5f, 0.55f);
 
             var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
             cube.name = "Bad Part";
