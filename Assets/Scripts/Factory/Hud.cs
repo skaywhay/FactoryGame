@@ -108,6 +108,11 @@ namespace Game.Factory
         bool _practicePausePressed;
         int _practiceBuyerLevel;
 
+        // Settings
+        GameObject _settings;
+        Slider _musicSlider;
+        Text _musicVolumeText;
+
         const string TutorialDoneKey = "factory_tutorial_done";
 
         // Advice Banner
@@ -287,6 +292,7 @@ namespace Game.Factory
             BuildTutorial(modalCanvas);
             BuildPractice(modalCanvas);
             BuildGameOver(modalCanvas);
+            BuildSettings(modalCanvas);
 
             // Первый запуск: сразу показываем обучение, чтобы игрок
             // не оказался один на один с пустым заводом.
@@ -606,14 +612,19 @@ namespace Game.Factory
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = true;
 
-            _tabs = new Button[ProductInfo.Count + 1];
+            // +1 для вкладки настроек
+            _tabs = new Button[ProductInfo.Count + 2];
 
             for (int i = 0; i < _tabs.Length; i++)
             {
                 int index = i;
-                string label = i < ProductInfo.Count
-                    ? ProductInfo.ShortName((ProductKind)i)
-                    : "СБОРКА";
+                string label;
+                if (i < ProductInfo.Count)
+                    label = ProductInfo.ShortName((ProductKind)i);
+                else if (i == ProductInfo.Count)
+                    label = "СБОРКА";
+                else
+                    label = "НАСТРОЙКИ";
 
                 Button tab = NewButton(tabContainer, "Tab " + i, label, Color.white, 12, null);
                 Image tabImg = tab.GetComponent<Image>();
@@ -873,6 +884,107 @@ namespace Game.Factory
             _gameOver.SetActive(false);
         }
 
+        void BuildSettings(RectTransform root)
+        {
+            _settings = NewRect(root, "SettingsModal").gameObject;
+            RectTransform rect = _settings.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(400f, 300f);
+            AddSlicedImage(rect, _sprSidebarBg);
+
+            // Заголовок
+            Text title = NewText(rect, "SettingsTitle", "НАСТРОЙКИ", 20, AccentCyan, TextAnchor.MiddleCenter);
+            SetRect(title.rectTransform, new Vector2(0f, 110f), new Vector2(360f, 30f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+            title.fontStyle = FontStyle.Bold;
+
+            // Громкость музыки
+            Text musicLabel = NewText(rect, "MusicLabel", "ГРОМКОСТЬ МУЗЫКИ", 14, TextWhite, TextAnchor.MiddleLeft);
+            SetRect(musicLabel.rectTransform, new Vector2(-170f, 40f), new Vector2(340f, 24f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+
+            // Слайдер громкости
+            _musicSlider = NewRect(rect, "MusicSlider").gameObject.AddComponent<Slider>();
+            RectTransform sliderRect = _musicSlider.GetComponent<RectTransform>();
+            sliderRect.anchorMin = new Vector2(0.5f, 1f);
+            sliderRect.anchorMax = new Vector2(0.5f, 1f);
+            sliderRect.pivot = new Vector2(0.5f, 1f);
+            sliderRect.anchoredPosition = new Vector2(0f, 0f);
+            sliderRect.sizeDelta = new Vector2(300f, 24f);
+
+            // Фон слайдера
+            GameObject bg = NewRect(sliderRect, "Background").gameObject;
+            Image bgImg = bg.AddComponent<Image>();
+            bgImg.sprite = _sprBtnNeutral;
+            bgImg.type = Image.Type.Sliced;
+            bgImg.color = new Color(0.1f, 0.1f, 0.15f, 1f);
+            _musicSlider.targetGraphic = bgImg;
+
+            // Fill area
+            GameObject fillArea = NewRect(sliderRect, "Fill Area").gameObject;
+            RectTransform fillAreaRect = fillArea.GetComponent<RectTransform>();
+            fillAreaRect.anchorMin = new Vector2(0f, 0.5f);
+            fillAreaRect.anchorMax = new Vector2(0.5f, 0.5f);
+            fillAreaRect.pivot = new Vector2(0f, 0.5f);
+            fillAreaRect.sizeDelta = new Vector2(-10f, 16f);
+            fillAreaRect.anchoredPosition = new Vector2(10f, 0f);
+            Image fillImg = fillArea.AddComponent<Image>();
+            fillImg.sprite = _sprAccentBar;
+            fillImg.type = Image.Type.Sliced;
+            fillImg.color = AccentCyan;
+            _musicSlider.fillRect = fillAreaRect;
+            _musicSlider.fillRect = fillAreaRect;
+
+            // Handle
+            GameObject handle = NewRect(sliderRect, "Handle Slide Area/Handle").gameObject;
+            RectTransform handleRect = handle.GetComponent<RectTransform>();
+            handleRect.sizeDelta = new Vector2(20f, 24f);
+            Image handleImg = handle.AddComponent<Image>();
+            handleImg.sprite = _sprBtnAmber;
+            handleImg.type = Image.Type.Sliced;
+            _musicSlider.handleRect = handleRect;
+
+            _musicSlider.minValue = 0f;
+            _musicSlider.maxValue = 1f;
+            _musicSlider.value = PlayerPrefs.GetFloat("MusicVolume", 0.5f);
+            _musicSlider.onValueChanged.AddListener(delegate { OnMusicVolumeChanged(_musicSlider.value); });
+
+            // Значение громкости
+            _musicVolumeText = NewText(rect, "MusicVolumeText", "50%", 14, AccentCyan, TextAnchor.MiddleCenter);
+            SetRect(_musicVolumeText.rectTransform, new Vector2(0f, -40f), new Vector2(100f, 24f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+
+            // Кнопка закрытия
+            Button closeBtn = NewButton(rect, "CloseSettings", "ЗАКРЫТЬ", Color.white, 14, _sprBtnNeutral);
+            SetRect(closeBtn.GetComponent<RectTransform>(), new Vector2(0f, -100f), new Vector2(140f, 40f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+            closeBtn.onClick.AddListener(CloseSettings);
+
+            _settings.SetActive(false);
+        }
+
+        void OpenSettings()
+        {
+            if (_settings != null) _settings.SetActive(true);
+            // Закрываем другие модалки
+            if (_tutorial != null && _tutorial.activeSelf) CloseTutorial();
+            if (_table != null && _table.activeSelf) ToggleTable();
+        }
+
+        void CloseSettings()
+        {
+            if (_settings != null) _settings.SetActive(false);
+        }
+
+        void OnMusicVolumeChanged(float value)
+        {
+            if (_musicVolumeText != null)
+                _musicVolumeText.text = Mathf.RoundToInt(value * 100f) + "%";
+            if (_game.Sim != null && _game.Sim.MusicSource != null)
+                _game.Sim.MusicSource.volume = value;
+            PlayerPrefs.SetFloat("MusicVolume", value);
+            PlayerPrefs.Save();
+        }
+
         // ------------------------------------------------------------- Logic & Updates
         public bool TutorialOpen
         {
@@ -1041,10 +1153,18 @@ namespace Game.Factory
         void UpdateCardsVisible(FactorySim sim)
         {
             bool machines = _selected < sim.Lines.Count;
+            bool assembly = _selected == sim.Lines.Count;
+            bool settings = _selected == sim.Lines.Count + 1;
+
             for (int i = 0; i < _cards.Length; i++)
                 if (_cards[i].Root != null) _cards[i].Root.gameObject.SetActive(machines);
             for (int i = 0; i < _assemblyCards.Length; i++)
-                if (_assemblyCards[i].Root != null) _assemblyCards[i].Root.gameObject.SetActive(!machines);
+                if (_assemblyCards[i].Root != null) _assemblyCards[i].Root.gameObject.SetActive(assembly);
+            if (_build != null && _build.Root != null) _build.Root.gameObject.SetActive(assembly);
+
+            // Settings panel
+            if (_settings != null)
+                _settings.SetActive(settings);
         }
 
         void UpdateTabs(FactorySim sim)

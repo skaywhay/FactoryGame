@@ -14,6 +14,7 @@ namespace Game.Factory
         HallRefs _hall;
         Hud _hud;
         bool _wasPaused;
+        AudioSource _musicSource;
 
         void Awake()
         {
@@ -41,6 +42,29 @@ namespace Game.Factory
                 if (old != null) Destroy(old);
                 _hud = new Hud(this);
             }
+
+            // Background music
+            if (_musicSource == null)
+            {
+                _musicSource = gameObject.AddComponent<AudioSource>();
+                _musicSource.playOnAwake = true;
+                _musicSource.loop = true;
+                _musicSource.spatialBlend = 0f; // 2D sound
+                var clip = Resources.Load<AudioClip>("Audio/background_music");
+                if (clip != null)
+                {
+                    _musicSource.clip = clip;
+                    _musicSource.volume = PlayerPrefs.GetFloat("MusicVolume", 0.5f);
+                    _musicSource.Play();
+                }
+                else
+                {
+                    Debug.LogWarning("[FactoryGame] Background music clip not found in Resources/Audio/");
+                }
+            }
+
+            // Expose music source to sim for volume control
+            Sim.MusicSource = _musicSource;
         }
 
         // Порядок как в симуляции: сначала считаем экономику, потом
