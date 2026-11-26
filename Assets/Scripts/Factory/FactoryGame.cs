@@ -80,6 +80,13 @@ namespace Game.Factory
 
             bool paused = Sim.Paused || _hud.TutorialOpen;
 
+            // Пауза музыки вместе с игрой
+            if (_musicSource != null)
+            {
+                if (paused && _musicSource.isPlaying) _musicSource.Pause();
+                else if (!paused && !_musicSource.isPlaying) _musicSource.UnPause();
+            }
+
             float dt = Time.deltaTime;
             if (!paused) Sim.Tick(dt);
             UpdateHall(paused ? 0f : dt);
