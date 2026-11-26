@@ -79,10 +79,11 @@ namespace Game.Factory
             new Color(0.72f, 0.56f, 0.98f)
         };
 
-        // Камера: позиция и цель из Play Mode.
+        // Камера: позиция, цель и вращение из Play Mode.
         static readonly Vector3 CameraPos = new Vector3(-1.20448f, 19.33295f, -13.37823f);
         static readonly Vector3 CameraTarget = new Vector3(0f, 0f, -2f);
         static readonly Vector3 CameraEuler = new Vector3(53.664f, 0.204f, -0.004f);
+        static readonly float CameraFOV = 68f;
 
         // Собираем зал в фиксированном порядке: свет -> пол -> стены -> декор ->
         // линии -> генераторы -> сборка -> камера. Камера последняя, чтобы
@@ -412,8 +413,9 @@ namespace Game.Factory
             Spawn("__generator", station.Root, new Vector3(0f, 0f, 0.2f), 2.5f, 180);
             Spawn("warning-traffic", station.Root, new Vector3(-1.5f, 0f, -0.75f), 0.75f, 12f);
 
-            // Позиции шестерёнок под каждый генератор (Y взяты из Play Mode).
-            // index 0 = Генератор 1, index 1 = Генератор 2.
+            // Позиции шестерёнок (мировые Y из Play Mode переведены в локальные).
+            // Базовые X/Z от старого кода, Y — как в Play Mode.
+            // index 0 = Генератор 1 (левее), index 1 = Генератор 2 (правее).
             float bigY = (index == 0) ? 2.336f : 2.316f;
             float smallY = (index == 0) ? 2.313f : 2.293f;
 
@@ -1093,7 +1095,7 @@ namespace Game.Factory
             camera.transform.rotation = Quaternion.Euler(CameraEuler);
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = new Color(0.05f, 0.06f, 0.09f);
-            camera.fieldOfView = 42f;
+            camera.fieldOfView = CameraFOV;
             camera.nearClipPlane = 0.3f;
             camera.farClipPlane = 160f;
             return camera;
