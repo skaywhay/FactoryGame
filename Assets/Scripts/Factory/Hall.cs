@@ -79,11 +79,10 @@ namespace Game.Factory
             new Color(0.72f, 0.56f, 0.98f)
         };
 
-        // Камера смотрит немного сверху и сбоку. Цифры подбирал мышкой,
-        // чтобы влезли и линии, и задняя площадка со сборкой.
-        // Для новой карты (scale=1.2, rotated -90 X): центр карты ~(0,0,0), линии Z=-4..+1, сборка X=+5.5
-        static readonly Vector3 CameraPos = new Vector3(8f, 28f, -22f);
-        static readonly Vector3 CameraTarget = new Vector3(2f, 0f, -2f);
+        // Камера смотрит прямо (сверху вниз по Z), без бокового угла.
+        // Центр карты ~(0,0,0), линии Z≈-4..+1, сборка X≈-5.5 (после поворота 180°).
+        static readonly Vector3 CameraPos = new Vector3(0f, 30f, -25f);
+        static readonly Vector3 CameraTarget = new Vector3(0f, 0f, -2f);
 
         // Собираем зал в фиксированном порядке: свет -> пол -> стены -> декор ->
         // линии -> генераторы -> сборка -> камера. Камера последняя, чтобы
