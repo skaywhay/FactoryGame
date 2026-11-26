@@ -247,6 +247,11 @@ namespace Game.Factory
             if (_hud != null) _hud.ToggleTable();
         }
 
+        public void DebugSettingsScroll(float normalizedY)
+        {
+            if (_hud != null) _hud.DebugSettingsScroll(normalizedY);
+        }
+
         public void DebugTutorial()
         {
             if (_hud != null) _hud.ToggleTutorial();

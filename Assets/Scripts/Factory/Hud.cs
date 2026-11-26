@@ -121,6 +121,7 @@ namespace Game.Factory
         Text _musicVolumeText;
         Slider _sfxSlider;
         Text _sfxVolumeText;
+        Text _gameSpeedValueText;
 
         const string TutorialDoneKey = "factory_tutorial_done";
 
@@ -1107,7 +1108,7 @@ namespace Game.Factory
         void BuildAudioSection(Transform parent)
         {
             // Section header
-            GameObject section = CreateSettingSection(parent, "АУДИО");
+            GameObject section = CreateSettingSection(parent, "АУДИО", AccentCyan);
 
             // Music volume
             CreateSliderSetting(section.transform, "Громкость музыки", "MusicVolume", 0.5f,
@@ -1130,7 +1131,7 @@ namespace Game.Factory
 
         void BuildGraphicsSection(Transform parent)
         {
-            GameObject section = CreateSettingSection(parent, "ГРАФИКА");
+            GameObject section = CreateSettingSection(parent, "ГРАФИКА", AccentPurple);
 
             CreateToggleSetting(section.transform, "Частицы", "ParticlesEnabled", true,
                 value => {
@@ -1155,7 +1156,7 @@ namespace Game.Factory
 
         void BuildGameplaySection(Transform parent)
         {
-            GameObject section = CreateSettingSection(parent, "ИГРА");
+            GameObject section = CreateSettingSection(parent, "ИГРА", AccentAmber);
 
             CreateToggleSetting(section.transform, "Автопауза при потере фокуса", "AutoPauseOnFocusLoss", true,
                 value => {
@@ -1172,18 +1173,21 @@ namespace Game.Factory
             CreateSliderSetting(section.transform, "Скорость игры", "GameSpeed", 1.0f,
                 value => {
                     Time.timeScale = value;
+                    // Подпись значения — только отображение, на поведение не влияет.
+                    if (_gameSpeedValueText != null)
+                        _gameSpeedValueText.text = Mathf.RoundToInt(value * 100f) + "%";
                     PlayerPrefs.SetFloat("GameSpeed", value);
                     PlayerPrefs.Save();
                 },
-                out _, out _);
+                out _, out _gameSpeedValueText);
         }
 
         void BuildOtherSection(Transform parent)
         {
-            GameObject section = CreateSettingSection(parent, "ДРУГОЕ");
+            GameObject section = CreateSettingSection(parent, "ДРУГОЕ", TextMuted);
 
-            // Reset to defaults
-            Button resetBtn = CreateButtonSetting(section.transform, "Сбросить настройки", "Сбросить",
+            // Reset to defaults — красная destructive-кнопка, как и положено сбросу в дизайн-ките
+            Button resetBtn = CreateButtonSetting(section.transform, "Сбросить настройки", "СБРОСИТЬ", _sprBtnRed,
                 () => {
                     PlayerPrefs.DeleteAll();
                     PlayerPrefs.Save();
@@ -1215,28 +1219,51 @@ namespace Game.Factory
                 });
 
             // Version info
-            Text versionText = NewText(section.transform, "VersionInfo", "Версия 1.0.0", 11, TextMuted, TextAnchor.MiddleCenter);
-            RectTransform vt = versionText.rectTransform;
-            vt.anchorMin = new Vector2(0f, 0f);
-            vt.anchorMax = new Vector2(1f, 0f);
-            vt.pivot = new Vector2(0.5f, 0f);
-            vt.anchoredPosition = new Vector2(0f, 8f);
-            vt.sizeDelta = new Vector2(0f, 20f);
+            RectTransform versionRow = CreateInsetRow(section.transform, "VersionInfo", 20f);
+            Text versionText = NewText(versionRow, "VersionInfo", "Версия 1.0.0", 11, TextMuted, TextAnchor.MiddleCenter);
+            versionText.rectTransform.anchorMin = Vector2.zero;
+            versionText.rectTransform.anchorMax = Vector2.one;
+            versionText.rectTransform.sizeDelta = Vector2.zero;
         }
 
-        GameObject CreateSettingSection(Transform parent, string title)
+        // «Утопленный» цвет строк: тот же, что у трека прогресса плана в топбаре.
+        static readonly Color RowInsetColor = new Color(0.078f, 0.102f, 0.122f, 1f);
+
+        // Карточка раздела в языке карточек станков: подложка Surface 2 со светлой
+        // рамкой, акцентная полоска 4 px слева, белый bold-заголовок и разделитель.
+        GameObject CreateSettingSection(Transform parent, string title, Color accent)
         {
+            // Подложка и полоска висят на самом объекте карточки: дочерние объекты
+            // VerticalLayoutGroup всё равно разложил бы рядами.
             GameObject section = NewRect(parent, "Section_" + title).gameObject;
             RectTransform sr = section.GetComponent<RectTransform>();
             sr.anchorMin = new Vector2(0f, 1f);
             sr.anchorMax = new Vector2(1f, 1f);
             sr.pivot = new Vector2(0.5f, 1f);
             sr.anchoredPosition = new Vector2(0f, 0f);
-            sr.sizeDelta = new Vector2(0f, 0f); // Height will be controlled by layout group
+            sr.sizeDelta = new Vector2(0f, 0f); // высоту считает ContentSizeFitter
+
+            Image cardBg = section.AddComponent<Image>();
+            cardBg.sprite = _sprCardMachineBase;
+            cardBg.type = Image.Type.Sliced;
+            cardBg.color = Color.white;
+            cardBg.raycastTarget = false;
+
+            RectTransform stripe = NewRect(sr, "Stripe");
+            stripe.anchorMin = new Vector2(0f, 0f);
+            stripe.anchorMax = new Vector2(0f, 1f);
+            stripe.pivot = new Vector2(0f, 0.5f);
+            stripe.anchoredPosition = new Vector2(7f, 0f);
+            stripe.sizeDelta = new Vector2(4f, -24f);
+            Image stripeImg = stripe.gameObject.AddComponent<Image>();
+            stripeImg.sprite = _sprAccentBar;
+            stripeImg.type = Image.Type.Sliced;
+            stripeImg.color = accent;
+            stripeImg.raycastTarget = false;
 
             VerticalLayoutGroup vlg = section.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(0, 0, 0, 8);
-            vlg.spacing = 10f;
+            vlg.padding = new RectOffset(20, 12, 12, 12);
+            vlg.spacing = 8f;
             vlg.childControlWidth = true;
             vlg.childForceExpandWidth = true;
             vlg.childControlHeight = true; // IMPORTANT: Let section expand to fit children
@@ -1247,26 +1274,14 @@ namespace Game.Factory
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // Section title
-            Text sectionTitle = NewText(section.transform, "SectionTitle_" + title, title, 13, AccentAmber, TextAnchor.MiddleLeft);
-            RectTransform str = sectionTitle.rectTransform;
-            str.anchorMin = new Vector2(0f, 1f);
-            str.anchorMax = new Vector2(1f, 1f);
-            str.pivot = new Vector2(0f, 1f);
-            str.anchoredPosition = Vector2.zero;
-            str.sizeDelta = new Vector2(0f, 22f);
+            Text sectionTitle = NewText(section.transform, "SectionTitle_" + title, title, 13, TextWhite, TextAnchor.MiddleLeft);
             sectionTitle.fontStyle = FontStyle.Bold;
             // Add LayoutElement so layout group knows its height
             LayoutElement titleLayout = sectionTitle.gameObject.AddComponent<LayoutElement>();
-            titleLayout.preferredHeight = 22f;
+            titleLayout.preferredHeight = 18f;
 
             // Separator
             GameObject sep = NewRect(section.transform, "Separator").gameObject;
-            RectTransform spr = sep.GetComponent<RectTransform>();
-            spr.anchorMin = new Vector2(0f, 1f);
-            spr.anchorMax = new Vector2(1f, 1f);
-            spr.pivot = new Vector2(0.5f, 1f);
-            spr.anchoredPosition = new Vector2(0f, -28f);
-            spr.sizeDelta = new Vector2(0f, 1f);
             Image sepImg = sep.AddComponent<Image>();
             sepImg.color = new Color(1f, 1f, 1f, 0.08f);
             sepImg.raycastTarget = false;
@@ -1276,75 +1291,92 @@ namespace Game.Factory
             return section;
         }
 
+        // «Утопленная» строка настройки: подложка + фиксированная высота,
+        // чтобы родительская вертикальная верстка знала размер строки.
+        RectTransform CreateInsetRow(Transform parent, string name, float height)
+        {
+            GameObject row = NewRect(parent, "Row_" + name).gameObject;
+            LayoutElement le = row.AddComponent<LayoutElement>();
+            le.preferredHeight = height;
+
+            Image bg = row.AddComponent<Image>();
+            bg.sprite = SoftShape("row_inset_bg", 32, 6f, RowInsetColor, Color.clear, 0f);
+            bg.type = Image.Type.Sliced;
+            bg.raycastTarget = false;
+            return row.GetComponent<RectTransform>();
+        }
+
+        // Подпись слева и значение справа — общий каркас строки настройки.
+        Text SettingLabel(RectTransform row, string name, string label, out Text valueText)
+        {
+            Text labelText = NewText(row, name, label, 13, TextWhite, TextAnchor.MiddleLeft);
+            RectTransform lr = labelText.rectTransform;
+            lr.anchorMin = new Vector2(0f, 1f);
+            lr.anchorMax = new Vector2(1f, 1f);
+            lr.pivot = new Vector2(0f, 1f);
+            lr.offsetMin = new Vector2(12f, -18f);
+            lr.offsetMax = new Vector2(-80f, 0f);
+
+            valueText = NewText(row, name + "Value", "", 13, AccentCyan, TextAnchor.MiddleRight);
+            SetRect(valueText.rectTransform, new Vector2(-12f, 0f), new Vector2(68f, 18f),
+                new Vector2(1f, 1f), new Vector2(1f, 1f));
+            return labelText;
+        }
+
         void CreateSliderSetting(Transform parent, string label, string prefKey, float defaultValue,
             UnityEngine.Events.UnityAction<float> onChange, out Slider slider, out Text valueText)
         {
-            GameObject setting = NewRect(parent, "Slider_" + label).gameObject;
-            RectTransform r = setting.GetComponent<RectTransform>();
-            r.anchorMin = new Vector2(0f, 1f);
-            r.anchorMax = new Vector2(1f, 1f);
-            r.pivot = new Vector2(0.5f, 1f);
-            r.sizeDelta = new Vector2(0f, 48f);
+            // Строка-подложка: подпись и значение сверху, тонкий трек снизу.
+            RectTransform row = CreateInsetRow(parent, "Slider_" + label, 48f);
+            SettingLabel(row, "Label", label, out valueText);
+            valueText.text = Mathf.RoundToInt(PlayerPrefs.GetFloat(prefKey, defaultValue) * 100f) + "%";
 
-            // IMPORTANT: Add LayoutElement so parent VerticalLayoutGroup knows our height
-            LayoutElement settingLayout = setting.AddComponent<LayoutElement>();
-            settingLayout.preferredHeight = 48f;
-
-            VerticalLayoutGroup vlg = setting.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(0, 0, 0, 0);
-            vlg.spacing = 4f;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childControlHeight = false;
-            vlg.childForceExpandHeight = false;
-
-            // Label + value
-            GameObject labelRow = NewRect(setting.transform, "LabelRow").gameObject;
-            RectTransform lr = labelRow.GetComponent<RectTransform>();
-            lr.anchorMin = new Vector2(0f, 1f);
-            lr.anchorMax = new Vector2(1f, 1f);
-            lr.pivot = new Vector2(0.5f, 1f);
-            lr.sizeDelta = new Vector2(0f, 20f);
-            LayoutElement lrLayout = labelRow.AddComponent<LayoutElement>();
-            lrLayout.preferredHeight = 20f;
-
-            HorizontalLayoutGroup hl = labelRow.AddComponent<HorizontalLayoutGroup>();
-            hl.childForceExpandWidth = true;
-
-            Text labelText = NewText(labelRow.transform, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
-            valueText = NewText(labelRow.transform, "ValueText", Mathf.RoundToInt(defaultValue * 100f) + "%", 13, AccentCyan, TextAnchor.MiddleRight);
-
-            // Slider
-            slider = NewRect(setting.transform, "Slider").gameObject.AddComponent<Slider>();
+            // Сам слайдер — область трека. Картинка трека лежит на нём же,
+            // поэтому клик по треку двигает значение.
+            slider = NewRect(row, "Slider").gameObject.AddComponent<Slider>();
             RectTransform sr = slider.GetComponent<RectTransform>();
-            sr.anchorMin = new Vector2(0f, 1f);
-            sr.anchorMax = new Vector2(1f, 1f);
-            sr.pivot = new Vector2(0.5f, 1f);
-            sr.sizeDelta = new Vector2(0f, 24f);
-            LayoutElement sliderLayout = sr.gameObject.AddComponent<LayoutElement>();
-            sliderLayout.preferredHeight = 24f;
+            sr.anchorMin = new Vector2(0f, 0f);
+            sr.anchorMax = new Vector2(1f, 0f);
+            sr.pivot = new Vector2(0.5f, 0f);
+            sr.anchoredPosition = new Vector2(0f, 8f);
+            sr.sizeDelta = new Vector2(-24f, 14f);
 
-            // Fill
+            Image trackImg = sr.gameObject.AddComponent<Image>();
+            trackImg.sprite = _sprProgressTrack;
+            trackImg.type = Image.Type.Sliced;
+            trackImg.color = Color.white;
+            trackImg.raycastTarget = true;
+
+            // Заливка: её якоря ведёт слайдер, поэтому она — ребёнок контейнера.
             GameObject fillArea = NewRect(sr, "Fill Area").gameObject;
             RectTransform far = fillArea.GetComponent<RectTransform>();
-            far.anchorMin = new Vector2(0f, 0.5f);
-            far.anchorMax = new Vector2(0.5f, 0.5f);
-            far.pivot = new Vector2(0f, 0.5f);
-            far.sizeDelta = new Vector2(-10f, 16f);
-            far.anchoredPosition = new Vector2(10f, 0f);
-            Image fillImg = fillArea.AddComponent<Image>();
-            fillImg.sprite = _sprAccentBar;
+            far.anchorMin = Vector2.zero;
+            far.anchorMax = Vector2.one;
+            far.sizeDelta = Vector2.zero;
+            GameObject fill = NewRect(far, "Fill").gameObject;
+            RectTransform fillRect = fill.GetComponent<RectTransform>();
+            fillRect.anchorMin = Vector2.zero;
+            fillRect.anchorMax = Vector2.one;
+            fillRect.sizeDelta = Vector2.zero;
+            Image fillImg = fill.AddComponent<Image>();
+            fillImg.sprite = _sprProgressFill;
             fillImg.type = Image.Type.Sliced;
-            fillImg.color = AccentCyan;
-            slider.fillRect = far;
+            fillImg.raycastTarget = false;
+            slider.fillRect = fillRect;
 
-            // Handle
-            GameObject handle = NewRect(sr, "Handle Slide Area/Handle").gameObject;
+            // Бегунок — круг с cyan-обводкой, а не кусок янтарной кнопки.
+            GameObject handleArea = NewRect(sr, "Handle Slide Area").gameObject;
+            RectTransform har = handleArea.GetComponent<RectTransform>();
+            har.anchorMin = Vector2.zero;
+            har.anchorMax = Vector2.one;
+            har.sizeDelta = Vector2.zero;
+
+            GameObject handle = NewRect(har, "Handle").gameObject;
             RectTransform hr = handle.GetComponent<RectTransform>();
-            hr.sizeDelta = new Vector2(20f, 24f);
+            hr.sizeDelta = new Vector2(18f, 18f);
             Image handleImg = handle.AddComponent<Image>();
-            handleImg.sprite = _sprBtnAmber;
-            handleImg.type = Image.Type.Sliced;
+            handleImg.sprite = SoftShape("slider_handle", 18, 9f, TextWhite, AccentCyan, 2f);
+            handleImg.raycastTarget = true;
             slider.handleRect = hr;
 
             slider.minValue = 0f;
@@ -1355,104 +1387,106 @@ namespace Game.Factory
 
         void CreateToggleSetting(Transform parent, string label, string prefKey, bool defaultValue, UnityEngine.Events.UnityAction<bool> onChange)
         {
-            GameObject setting = NewRect(parent, "Toggle_" + label).gameObject;
-            RectTransform r = setting.GetComponent<RectTransform>();
-            r.anchorMin = new Vector2(0f, 1f);
-            r.anchorMax = new Vector2(1f, 1f);
-            r.pivot = new Vector2(0.5f, 1f);
-            r.sizeDelta = new Vector2(0f, 36f);
+            RectTransform row = CreateInsetRow(parent, "Toggle_" + label, 36f);
+            Text labelText = NewText(row, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
+            labelText.rectTransform.anchorMin = new Vector2(0f, 0f);
+            labelText.rectTransform.anchorMax = new Vector2(1f, 1f);
+            labelText.rectTransform.offsetMin = new Vector2(12f, 0f);
+            labelText.rectTransform.offsetMax = new Vector2(-72f, 0f);
 
-            // IMPORTANT: Add LayoutElement so parent VerticalLayoutGroup knows our height
-            LayoutElement settingLayout = setting.AddComponent<LayoutElement>();
-            settingLayout.preferredHeight = 36f;
-
-            HorizontalLayoutGroup hl = setting.AddComponent<HorizontalLayoutGroup>();
-            hl.childForceExpandWidth = true;
-
-            Text labelText = NewText(setting.transform, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
-            RectTransform ltr = labelText.rectTransform;
-            ltr.sizeDelta = new Vector2(0f, 36f);
-
-            Toggle toggle = NewRect(setting.transform, "Toggle").gameObject.AddComponent<Toggle>();
+            // Переключатель: дорожка 46×22 + круглый бегунок 16 px.
+            // Раньше внутрь дорожки заливалась янтарная «галочка» во весь рост,
+            // и получался сплошной цветной квадрат.
+            Toggle toggle = NewRect(row, "Toggle").gameObject.AddComponent<Toggle>();
             RectTransform tr = toggle.GetComponent<RectTransform>();
             tr.anchorMin = new Vector2(1f, 0.5f);
             tr.anchorMax = new Vector2(1f, 0.5f);
             tr.pivot = new Vector2(1f, 0.5f);
-            tr.sizeDelta = new Vector2(52f, 28f);
+            tr.anchoredPosition = new Vector2(-12f, 0f);
+            tr.sizeDelta = new Vector2(46f, 22f);
 
             Image bg = tr.gameObject.AddComponent<Image>();
-            bg.sprite = _sprBtnNeutral;
+            bg.sprite = SoftShape("switch_track", 32, 6f, RowInsetColor, ColorBorder, 1f);
             bg.type = Image.Type.Sliced;
-            bg.color = new Color(0.15f, 0.15f, 0.2f, 1f);
+            bg.raycastTarget = true;
             toggle.targetGraphic = bg;
 
-            GameObject check = NewRect(tr, "Checkmark").gameObject;
-            RectTransform cr = check.GetComponent<RectTransform>();
-            // Заполняем сам переключатель, иначе у новой RectTransform
-            // остаётся размер 100×100 и галочка вылезает за рамку.
-            cr.anchorMin = Vector2.zero;
-            cr.anchorMax = Vector2.one;
-            cr.pivot = new Vector2(0.5f, 0.5f);
-            cr.anchoredPosition = Vector2.zero;
-            cr.sizeDelta = new Vector2(-8f, -8f);
-            Image checkImg = check.AddComponent<Image>();
-            checkImg.sprite = _sprBtnAmber;
-            checkImg.type = Image.Type.Sliced;
-            checkImg.color = AccentCyan;
-            toggle.graphic = checkImg;
+            GameObject knob = NewRect(tr, "Knob").gameObject;
+            RectTransform kr = knob.GetComponent<RectTransform>();
+            kr.anchorMin = new Vector2(0f, 0.5f);
+            kr.anchorMax = new Vector2(0f, 0.5f);
+            kr.pivot = new Vector2(0f, 0.5f);
+            kr.sizeDelta = new Vector2(16f, 16f);
+            Image knobImg = knob.AddComponent<Image>();
+            // Спрайт белый, цвет задаём тоном: SoftShape кэширует по имени,
+            // и повторный вызов с другим цветом вернул бы старый спрайт.
+            knobImg.sprite = SoftShape("switch_knob", 16, 8f, Color.white, Color.clear, 0f);
+            knobImg.raycastTarget = false;
 
-            toggle.isOn = PlayerPrefs.GetInt(prefKey, defaultValue ? 1 : 0) == 1;
+            bool on = PlayerPrefs.GetInt(prefKey, defaultValue ? 1 : 0) == 1;
+            toggle.isOn = on;
+            // Бегунок ездит вручную: Toggle только переключает состояние.
+            toggle.onValueChanged.AddListener(value =>
+            {
+                kr.anchoredPosition = new Vector2(value ? 27f : 3f, 0f);
+                knobImg.color = value ? AccentCyan : TextMuted;
+            });
             toggle.onValueChanged.AddListener(onChange);
+            kr.anchoredPosition = new Vector2(on ? 27f : 3f, 0f);
+            knobImg.color = on ? AccentCyan : TextMuted;
         }
 
         void CreateDropdownSetting(Transform parent, string label, string prefKey, string[] options, int defaultIndex, UnityEngine.Events.UnityAction<int> onChange)
         {
             // Вместо Dropdown — ряд кнопок-вариантов. У Dropdown без шаблона
             // не было ни подписи, ни списка, и он выглядел пустым прямоугольником.
-            GameObject setting = NewRect(parent, "Dropdown_" + label).gameObject;
-            RectTransform r = setting.GetComponent<RectTransform>();
-            r.anchorMin = new Vector2(0f, 1f);
-            r.anchorMax = new Vector2(1f, 1f);
-            r.pivot = new Vector2(0.5f, 1f);
-            r.sizeDelta = new Vector2(0f, 36f);
+            RectTransform row = CreateInsetRow(parent, "Dropdown_" + label, 36f);
 
-            LayoutElement settingLayout = setting.AddComponent<LayoutElement>();
-            settingLayout.preferredHeight = 36f;
-
-            HorizontalLayoutGroup hl = setting.AddComponent<HorizontalLayoutGroup>();
-            hl.spacing = 6f;
-            hl.childAlignment = TextAnchor.MiddleLeft;
-            hl.childControlWidth = false;
-            hl.childControlHeight = false;
-            hl.childForceExpandWidth = false;
-
-            Text labelText = NewText(setting.transform, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
-            labelText.rectTransform.sizeDelta = new Vector2(110f, 36f);
-            LayoutElement labelLayout = labelText.gameObject.AddComponent<LayoutElement>();
-            labelLayout.preferredWidth = 110f;
-            labelLayout.preferredHeight = 36f;
+            Text labelText = NewText(row, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
+            labelText.rectTransform.anchorMin = new Vector2(0f, 0f);
+            labelText.rectTransform.anchorMax = new Vector2(0f, 1f);
+            labelText.rectTransform.pivot = new Vector2(0f, 0.5f);
+            labelText.rectTransform.sizeDelta = new Vector2(120f, 0f);
+            labelText.rectTransform.offsetMin = new Vector2(12f, 0f);
 
             int current = PlayerPrefs.GetInt(prefKey, defaultIndex);
             if (current < 0 || current >= options.Length) current = defaultIndex;
 
-            Button[] buttons = new Button[options.Length];
             Text[] labels = new Text[options.Length];
+            Button[] buttons = new Button[options.Length];
 
             for (int i = 0; i < options.Length; i++)
             {
                 int index = i;
-                Button b = NewButton(setting.transform, "Option_" + i, options[i], Color.white, 12, _sprBtnNeutral);
-                LayoutElement le = b.gameObject.AddComponent<LayoutElement>();
-                le.preferredWidth = 82f;
-                le.preferredHeight = 28f;
-
+                // Сегменты — как вкладки линий в сайдбаре: активный получает
+                // подложку tab_item_active и белый bold, остальные приглушены.
+                Button b = NewButton(row, "Option_" + i, options[i], Color.white, 12, null);
                 buttons[i] = b;
-                labels[i] = b.GetComponentInChildren<Text>();
+                RectTransform br = b.GetComponent<RectTransform>();
+                br.anchorMin = new Vector2(0f, 0.5f);
+                br.anchorMax = new Vector2(0f, 0.5f);
+                br.pivot = new Vector2(0f, 0.5f);
+                br.anchoredPosition = new Vector2(132f + (82f + 6f) * i, 0f);
+                br.sizeDelta = new Vector2(82f, 28f);
 
+                Image btnImg = b.GetComponent<Image>();
+                btnImg.sprite = i == current ? _sprTabActive : null;
+                btnImg.type = Image.Type.Sliced;
+                btnImg.color = i == current ? Color.white : Color.clear;
+
+                labels[i] = b.GetComponentInChildren<Text>();
                 b.onClick.AddListener(() =>
                 {
                     for (int j = 0; j < labels.Length; j++)
-                        if (labels[j] != null) labels[j].color = j == index ? AccentAmber : Color.white;
+                    {
+                        if (labels[j] == null) continue;
+                        labels[j].color = j == index ? TextWhite : TextMuted;
+                        labels[j].fontStyle = j == index ? FontStyle.Bold : FontStyle.Normal;
+                        Image img = buttons[j] != null ? buttons[j].GetComponent<Image>() : null;
+                        if (img == null) continue;
+                        img.sprite = j == index ? _sprTabActive : null;
+                        img.color = j == index ? Color.white : Color.clear;
+                    }
 
                     PlayerPrefs.SetInt(prefKey, index);
                     PlayerPrefs.Save();
@@ -1461,41 +1495,37 @@ namespace Game.Factory
             }
 
             for (int j = 0; j < labels.Length; j++)
-                if (labels[j] != null) labels[j].color = j == current ? AccentAmber : Color.white;
+            {
+                if (labels[j] == null) continue;
+                labels[j].color = j == current ? TextWhite : TextMuted;
+                labels[j].fontStyle = j == current ? FontStyle.Bold : FontStyle.Normal;
+            }
         }
 
-        Button CreateButtonSetting(Transform parent, string label, string buttonText, UnityEngine.Events.UnityAction onClick)
+        Button CreateButtonSetting(Transform parent, string label, string buttonText, Sprite buttonSprite, UnityEngine.Events.UnityAction onClick)
         {
-            GameObject setting = NewRect(parent, "Button_" + label).gameObject;
-            RectTransform r = setting.GetComponent<RectTransform>();
-            r.anchorMin = new Vector2(0f, 1f);
-            r.anchorMax = new Vector2(1f, 1f);
-            r.pivot = new Vector2(0.5f, 1f);
-            r.sizeDelta = new Vector2(0f, 40f);
+            RectTransform row = CreateInsetRow(parent, "Button_" + label, 40f);
 
-            // IMPORTANT: Add LayoutElement so parent VerticalLayoutGroup knows our height
-            LayoutElement settingLayout = setting.AddComponent<LayoutElement>();
-            settingLayout.preferredHeight = 40f;
+            Text labelText = NewText(row, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
+            labelText.rectTransform.anchorMin = new Vector2(0f, 0f);
+            labelText.rectTransform.anchorMax = new Vector2(1f, 1f);
+            labelText.rectTransform.offsetMin = new Vector2(12f, 0f);
+            labelText.rectTransform.offsetMax = new Vector2(-160f, 0f);
 
-            HorizontalLayoutGroup hl = setting.AddComponent<HorizontalLayoutGroup>();
-            hl.childForceExpandWidth = true;
-
-            Text labelText = NewText(setting.transform, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
-            RectTransform ltr = labelText.rectTransform;
-            ltr.sizeDelta = new Vector2(0f, 40f);
-
-            Button btn = NewRect(setting.transform, "Button").gameObject.AddComponent<Button>();
+            Button btn = NewRect(row, "Button").gameObject.AddComponent<Button>();
             RectTransform br = btn.GetComponent<RectTransform>();
             br.anchorMin = new Vector2(1f, 0.5f);
             br.anchorMax = new Vector2(1f, 0.5f);
             br.pivot = new Vector2(1f, 0.5f);
-            br.sizeDelta = new Vector2(120f, 32f);
+            br.anchoredPosition = new Vector2(-12f, 0f);
+            br.sizeDelta = new Vector2(140f, 30f);
 
             Image bg = br.gameObject.AddComponent<Image>();
-            bg.sprite = _sprBtnNeutral;
+            bg.sprite = buttonSprite;
             bg.type = Image.Type.Sliced;
 
             Text btnText = NewText(br, "Text", buttonText, 13, Color.white, TextAnchor.MiddleCenter);
+            btnText.fontStyle = FontStyle.Bold;
             btn.onClick.AddListener(onClick);
 
             return btn;
@@ -2345,6 +2375,12 @@ namespace Game.Factory
             // Больше не открываем интро само при каждом запуске.
             PlayerPrefs.SetInt(TutorialDoneKey, 1);
             PlayerPrefs.Save();
+        }
+
+        // debug: прокрутка окна настроек — проверить нижние разделы без мыши.
+        public void DebugSettingsScroll(float normalizedY)
+        {
+            if (_settingsScrollRect != null) _settingsScrollRect.verticalNormalizedPosition = Mathf.Clamp01(normalizedY);
         }
 
         // debug: один вход на все действия практики, чтобы её можно было
