@@ -81,8 +81,9 @@ namespace Game.Factory
 
         // Камера смотрит немного сверху и сбоку. Цифры подбирал мышкой,
         // чтобы влезли и линии, и задняя площадка со сборкой.
-        static readonly Vector3 CameraPos = new Vector3(2.2f, 20.5f, -19.5f);
-        static readonly Vector3 CameraTarget = new Vector3(2.6f, 0.5f, 3.0f);
+        // Для новой карты (scale=1.2, rotated -90 X): центр карты ~(0,0,0), линии Z=-4..+1, сборка X=+5.5
+        static readonly Vector3 CameraPos = new Vector3(8f, 28f, -22f);
+        static readonly Vector3 CameraTarget = new Vector3(2f, 0f, -2f);
 
         // Собираем зал в фиксированном порядке: свет -> пол -> стены -> декор ->
         // линии -> генераторы -> сборка -> камера. Камера последняя, чтобы
@@ -141,9 +142,15 @@ namespace Game.Factory
             mapInstance.name = "FactoryHall_Map";
             refs.MapRoot = mapInstance;
 
-            // Масштаб модели: в FBX 1 клетка = 2.0 юнита. Наша старая сетка была 1 клетка = 1 юнит.
-            // Поэтому масштабируем на 0.5, чтобы координаты зон совпали с ожиданиями кода.
-            mapInstance.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
+            // FBX модель может быть вертикальной (плоскость XZ -> XY или YZ).
+            // Поворачиваем на -90° по X, чтобы пол лежал в XZ (Y вверх).
+            mapInstance.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+
+            // Масштаб: в FBX 1 клетка = 2.0 юнита. Станки из FactoryKit рассчитаны под старую сетку (клетка ~1 юнит, станок ~3.3м).
+            // Увеличиваем карту, чтобы станции поместились: scale = 1.0 даёт клетку 2.0, станок 3.3 влезет.
+            // Если станки всё равно большие — можно поднять до 1.2-1.5.
+            float mapScale = 1.2f;
+            mapInstance.transform.localScale = new Vector3(mapScale, mapScale, mapScale);
             mapInstance.transform.localPosition = Vector3.zero;
 
             // 2. Настраиваем материалы под текущий рендер-пайплайн (URP/Built-in) и включаем Emission.
