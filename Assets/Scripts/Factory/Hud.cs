@@ -838,30 +838,30 @@ namespace Game.Factory
 
         void BuildPractice(RectTransform root)
         {
-            // Плашка практики живёт снизу по центру: не закрывает план,
-            // карточки и совет, но всегда на виду.
+            // Плашка практики уходит влево над «Советом», а не в центр снизу:
+            // иначе она наезжает на красную бракованную деталь на передней линии.
             _practice = NewRect(root, "PracticePanel").gameObject;
             RectTransform rect = _practice.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0f);
-            rect.anchorMax = new Vector2(0.5f, 0f);
-            rect.pivot = new Vector2(0.5f, 0f);
-            rect.anchoredPosition = new Vector2(0f, 96f);
-            rect.sizeDelta = new Vector2(620f, 92f);
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(0f, 0f);
+            rect.pivot = new Vector2(0f, 0f);
+            rect.anchoredPosition = new Vector2(24f, 100f);
+            rect.sizeDelta = new Vector2(430f, 104f);
             AddSlicedImage(rect, _sprSidebarBg);
 
-            _practiceBadge = NewText(rect, "PracticeBadge", "ПРАКТИКА · 1 ИЗ 4", 12, AccentAmber, TextAnchor.UpperLeft);
-            SetRect(_practiceBadge.rectTransform, new Vector2(18f, -12f), new Vector2(320f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            _practiceBadge = NewText(rect, "PracticeBadge", "ПРАКТИКА · 1 ИЗ 5", 12, AccentAmber, TextAnchor.UpperLeft);
+            SetRect(_practiceBadge.rectTransform, new Vector2(18f, -12f), new Vector2(200f, 18f), new Vector2(0f, 1f), new Vector2(0f, 1f));
             _practiceBadge.fontStyle = FontStyle.Bold;
 
-            _practiceCounter = NewText(rect, "PracticeCounter", "0 / 4", 12, AccentCyan, TextAnchor.UpperRight);
+            _practiceCounter = NewText(rect, "PracticeCounter", "0 / 5", 12, AccentCyan, TextAnchor.UpperRight);
             SetRect(_practiceCounter.rectTransform, new Vector2(-108f, -12f), new Vector2(90f, 18f), new Vector2(1f, 1f), new Vector2(1f, 1f));
 
             _practiceSkip = NewButton(rect, "PracticeSkip", "ПРОПУСТИТЬ", Color.white, 11, _sprBtnNeutral);
             SetRect(_practiceSkip.GetComponent<RectTransform>(), new Vector2(-16f, -10f), new Vector2(86f, 26f), new Vector2(1f, 1f), new Vector2(1f, 1f));
             _practiceSkip.onClick.AddListener(SkipPractice);
 
-            _practiceTask = NewText(rect, "PracticeTask", "", 13, TextWhite, TextAnchor.UpperLeft);
-            SetRect(_practiceTask.rectTransform, new Vector2(18f, -40f), new Vector2(584f, 40f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            _practiceTask = NewText(rect, "PracticeTask", "", 12, TextWhite, TextAnchor.UpperLeft);
+            SetRect(_practiceTask.rectTransform, new Vector2(18f, -40f), new Vector2(394f, 56f), new Vector2(0f, 1f), new Vector2(0f, 1f));
 
             _practice.SetActive(false);
         }
@@ -912,11 +912,11 @@ namespace Game.Factory
             AddSlicedImage(header, _sprSidebarBg);
 
             Text title = NewText(header, "SettingsTitle", "НАСТРОЙКИ", 20, AccentCyan, TextAnchor.MiddleCenter);
-            SetRect(title.rectTransform, new Vector2(0f, 0f), new Vector2(-100f, 30f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
+            SetRect(title.rectTransform, new Vector2(0f, 0f), new Vector2(320f, 30f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
             title.fontStyle = FontStyle.Bold;
 
             Button closeBtn = NewButton(header, "CloseSettings", "✕", Color.white, 14, _sprBtnNeutral);
-            SetRect(closeBtn.GetComponent<RectTransform>(), new Vector2(-160f, 0f), new Vector2(32f, 32f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
+            SetRect(closeBtn.GetComponent<RectTransform>(), new Vector2(-12f, 0f), new Vector2(32f, 32f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
             closeBtn.onClick.AddListener(CloseSettings);
 
             // Scrollable content area for settings
@@ -944,8 +944,9 @@ namespace Game.Factory
             Image viewportImg = viewport.AddComponent<Image>();
             viewportImg.color = new Color(0, 0, 0, 0);
             viewportImg.raycastTarget = true;
-            Mask mask = viewport.AddComponent<Mask>();
-            mask.showMaskGraphic = false;
+            // RectMask2D режет по прямоугольнику без трафарета. Обычный Mask
+            // с прозрачной картинкой не писал стенсил, и весь контент пропадал.
+            viewport.AddComponent<RectMask2D>();
             scrollRect.viewport = viewportRect;
 
             // Content container with vertical layout
@@ -987,13 +988,7 @@ namespace Game.Factory
 
             // Music volume
             CreateSliderSetting(section.transform, "Громкость музыки", "MusicVolume", 0.5f,
-                value => {
-                    if (_musicVolumeText != null) _musicVolumeText.text = Mathf.RoundToInt(value * 100f) + "%";
-                    if (_game.Sim != null && _game.Sim.MusicSource != null)
-                        _game.Sim.MusicSource.volume = value;
-                    PlayerPrefs.SetFloat("MusicVolume", value);
-                    PlayerPrefs.Save();
-                },
+                OnMusicVolumeChanged,
                 out _musicSlider, out _musicVolumeText);
 
             // SFX volume
@@ -1277,6 +1272,14 @@ namespace Game.Factory
             toggle.targetGraphic = bg;
 
             GameObject check = NewRect(tr, "Checkmark").gameObject;
+            RectTransform cr = check.GetComponent<RectTransform>();
+            // Заполняем сам переключатель, иначе у новой RectTransform
+            // остаётся размер 100×100 и галочка вылезает за рамку.
+            cr.anchorMin = Vector2.zero;
+            cr.anchorMax = Vector2.one;
+            cr.pivot = new Vector2(0.5f, 0.5f);
+            cr.anchoredPosition = Vector2.zero;
+            cr.sizeDelta = new Vector2(-8f, -8f);
             Image checkImg = check.AddComponent<Image>();
             checkImg.sprite = _sprBtnAmber;
             checkImg.type = Image.Type.Sliced;
@@ -1289,50 +1292,61 @@ namespace Game.Factory
 
         void CreateDropdownSetting(Transform parent, string label, string prefKey, string[] options, int defaultIndex, UnityEngine.Events.UnityAction<int> onChange)
         {
+            // Вместо Dropdown — ряд кнопок-вариантов. У Dropdown без шаблона
+            // не было ни подписи, ни списка, и он выглядел пустым прямоугольником.
             GameObject setting = NewRect(parent, "Dropdown_" + label).gameObject;
             RectTransform r = setting.GetComponent<RectTransform>();
             r.anchorMin = new Vector2(0f, 1f);
             r.anchorMax = new Vector2(1f, 1f);
             r.pivot = new Vector2(0.5f, 1f);
-            r.sizeDelta = new Vector2(0f, 40f);
+            r.sizeDelta = new Vector2(0f, 36f);
 
-            // IMPORTANT: Add LayoutElement so parent VerticalLayoutGroup knows our height
             LayoutElement settingLayout = setting.AddComponent<LayoutElement>();
-            settingLayout.preferredHeight = 40f;
+            settingLayout.preferredHeight = 36f;
 
-            VerticalLayoutGroup vlg = setting.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(0, 0, 0, 0);
-            vlg.spacing = 4f;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandWidth = true;
+            HorizontalLayoutGroup hl = setting.AddComponent<HorizontalLayoutGroup>();
+            hl.spacing = 6f;
+            hl.childAlignment = TextAnchor.MiddleLeft;
+            hl.childControlWidth = false;
+            hl.childControlHeight = false;
+            hl.childForceExpandWidth = false;
 
             Text labelText = NewText(setting.transform, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
-            RectTransform ltr = labelText.rectTransform;
-            ltr.sizeDelta = new Vector2(0f, 20f);
+            labelText.rectTransform.sizeDelta = new Vector2(110f, 36f);
             LayoutElement labelLayout = labelText.gameObject.AddComponent<LayoutElement>();
-            labelLayout.preferredHeight = 20f;
+            labelLayout.preferredWidth = 110f;
+            labelLayout.preferredHeight = 36f;
 
-            Dropdown dropdown = NewRect(setting.transform, "Dropdown").gameObject.AddComponent<Dropdown>();
-            RectTransform dr = dropdown.GetComponent<RectTransform>();
-            dr.anchorMin = new Vector2(0f, 1f);
-            dr.anchorMax = new Vector2(1f, 1f);
-            dr.pivot = new Vector2(0.5f, 1f);
-            dr.sizeDelta = new Vector2(0f, 32f);
-            LayoutElement dropdownLayout = dr.gameObject.AddComponent<LayoutElement>();
-            dropdownLayout.preferredHeight = 32f;
+            int current = PlayerPrefs.GetInt(prefKey, defaultIndex);
+            if (current < 0 || current >= options.Length) current = defaultIndex;
 
-            Image bg = dr.gameObject.AddComponent<Image>();
-            bg.sprite = _sprBtnNeutral;
-            bg.type = Image.Type.Sliced;
-            bg.color = new Color(0.12f, 0.12f, 0.17f, 1f);
+            Button[] buttons = new Button[options.Length];
+            Text[] labels = new Text[options.Length];
 
-            Dropdown.OptionData[] data = new Dropdown.OptionData[options.Length];
             for (int i = 0; i < options.Length; i++)
-                data[i] = new Dropdown.OptionData(options[i]);
-            dropdown.options = new List<Dropdown.OptionData>(data);
+            {
+                int index = i;
+                Button b = NewButton(setting.transform, "Option_" + i, options[i], Color.white, 12, _sprBtnNeutral);
+                LayoutElement le = b.gameObject.AddComponent<LayoutElement>();
+                le.preferredWidth = 82f;
+                le.preferredHeight = 28f;
 
-            dropdown.value = PlayerPrefs.GetInt(prefKey, defaultIndex);
-            dropdown.onValueChanged.AddListener(onChange);
+                buttons[i] = b;
+                labels[i] = b.GetComponentInChildren<Text>();
+
+                b.onClick.AddListener(() =>
+                {
+                    for (int j = 0; j < labels.Length; j++)
+                        if (labels[j] != null) labels[j].color = j == index ? AccentAmber : Color.white;
+
+                    PlayerPrefs.SetInt(prefKey, index);
+                    PlayerPrefs.Save();
+                    onChange(index);
+                });
+            }
+
+            for (int j = 0; j < labels.Length; j++)
+                if (labels[j] != null) labels[j].color = j == current ? AccentAmber : Color.white;
         }
 
         Button CreateButtonSetting(Transform parent, string label, string buttonText, UnityEngine.Events.UnityAction onClick)
@@ -1400,6 +1414,7 @@ namespace Game.Factory
                 _musicSlider.value = PlayerPrefs.GetFloat("MusicVolume", 0.5f);
                 if (_musicVolumeText != null)
                     _musicVolumeText.text = Mathf.RoundToInt(_musicSlider.value * 100f) + "%";
+                ApplyMusicVolume(_musicSlider.value);
             }
             if (_sfxSlider != null)
             {
@@ -1418,10 +1433,21 @@ namespace Game.Factory
         {
             if (_musicVolumeText != null)
                 _musicVolumeText.text = Mathf.RoundToInt(value * 100f) + "%";
-            if (_game.Sim != null && _game.Sim.MusicSource != null)
-                _game.Sim.MusicSource.volume = value;
+
+            ApplyMusicVolume(value);
+
             PlayerPrefs.SetFloat("MusicVolume", value);
             PlayerPrefs.Save();
+        }
+
+        // Одна точка применения громкости: и при движении слайдера,
+        // и при открытии настроек, и после загрузки музыки.
+        void ApplyMusicVolume(float value)
+        {
+            if (_game == null) return;
+
+            if (_game.MusicSource != null) _game.MusicSource.volume = value;
+            if (_game.Sim != null && _game.Sim.MusicSource != null) _game.Sim.MusicSource.volume = value;
         }
 
         // ------------------------------------------------------------- Logic & Updates
