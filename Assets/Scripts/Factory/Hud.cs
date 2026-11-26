@@ -110,6 +110,7 @@ namespace Game.Factory
 
         // Settings
         GameObject _settings;
+        GameObject _settingsContent;
         Slider _musicSlider;
         Text _musicVolumeText;
 
@@ -892,74 +893,412 @@ namespace Game.Factory
             rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = new Vector2(400f, 300f);
+            rect.sizeDelta = new Vector2(480f, 420f);
             AddSlicedImage(rect, _sprSidebarBg);
 
-            // Заголовок
-            Text title = NewText(rect, "SettingsTitle", "НАСТРОЙКИ", 20, AccentCyan, TextAnchor.MiddleCenter);
-            SetRect(title.rectTransform, new Vector2(0f, 110f), new Vector2(360f, 30f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+            // Header with title and close button
+            RectTransform header = NewRect(rect, "Header");
+            header.anchorMin = new Vector2(0f, 1f);
+            header.anchorMax = new Vector2(1f, 1f);
+            header.pivot = new Vector2(0.5f, 1f);
+            header.anchoredPosition = new Vector2(0f, -10f);
+            header.sizeDelta = new Vector2(-20f, 40f);
+            AddSlicedImage(header, _sprSidebarBg);
+
+            Text title = NewText(header, "SettingsTitle", "НАСТРОЙКИ", 20, AccentCyan, TextAnchor.MiddleCenter);
+            SetRect(title.rectTransform, new Vector2(0f, 0f), new Vector2(-100f, 30f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
             title.fontStyle = FontStyle.Bold;
 
-            // Громкость музыки
-            Text musicLabel = NewText(rect, "MusicLabel", "ГРОМКОСТЬ МУЗЫКИ", 14, TextWhite, TextAnchor.MiddleLeft);
-            SetRect(musicLabel.rectTransform, new Vector2(-170f, 40f), new Vector2(340f, 24f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+            Button closeBtn = NewButton(header, "CloseSettings", "✕", Color.white, 14, _sprBtnNeutral);
+            SetRect(closeBtn.GetComponent<RectTransform>(), new Vector2(-160f, 0f), new Vector2(32f, 32f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
+            closeBtn.onClick.AddListener(CloseSettings);
 
-            // Слайдер громкости
-            _musicSlider = NewRect(rect, "MusicSlider").gameObject.AddComponent<Slider>();
-            RectTransform sliderRect = _musicSlider.GetComponent<RectTransform>();
-            sliderRect.anchorMin = new Vector2(0.5f, 1f);
-            sliderRect.anchorMax = new Vector2(0.5f, 1f);
-            sliderRect.pivot = new Vector2(0.5f, 1f);
-            sliderRect.anchoredPosition = new Vector2(0f, 0f);
-            sliderRect.sizeDelta = new Vector2(300f, 24f);
+            // Scrollable content area for settings
+            GameObject scrollGo = NewRect(rect, "SettingsScrollView").gameObject;
+            ScrollRect scrollRect = scrollGo.AddComponent<ScrollRect>();
+            RectTransform scrollRectTransform = scrollGo.GetComponent<RectTransform>();
+            scrollRectTransform.anchorMin = new Vector2(0f, 0f);
+            scrollRectTransform.anchorMax = new Vector2(1f, 1f);
+            scrollRectTransform.pivot = new Vector2(0.5f, 1f);
+            scrollRectTransform.anchoredPosition = new Vector2(0f, -55f);
+            scrollRectTransform.sizeDelta = new Vector2(-40f, -95f);
+            scrollRect.horizontal = false;
+            scrollRect.vertical = true;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
+            scrollRect.elasticity = 0.1f;
 
-            // Фон слайдера
-            GameObject bg = NewRect(sliderRect, "Background").gameObject;
+            // Viewport
+            GameObject viewport = NewRect(scrollRectTransform, "Viewport").gameObject;
+            RectTransform viewportRect = viewport.GetComponent<RectTransform>();
+            viewportRect.anchorMin = Vector2.zero;
+            viewportRect.anchorMax = Vector2.one;
+            viewportRect.pivot = new Vector2(0.5f, 1f);
+            viewportRect.anchoredPosition = Vector2.zero;
+            viewportRect.sizeDelta = Vector2.zero;
+            Image viewportImg = viewport.AddComponent<Image>();
+            viewportImg.color = new Color(0, 0, 0, 0);
+            viewportImg.raycastTarget = true;
+            Mask mask = viewport.AddComponent<Mask>();
+            mask.showMaskGraphic = false;
+            scrollRect.viewport = viewportRect;
+
+            // Content container with vertical layout
+            _settingsContent = NewRect(viewportRect, "SettingsContent").gameObject;
+            RectTransform contentRect = _settingsContent.GetComponent<RectTransform>();
+            contentRect.anchorMin = new Vector2(0f, 1f);
+            contentRect.anchorMax = new Vector2(1f, 1f);
+            contentRect.pivot = new Vector2(0.5f, 1f);
+            contentRect.anchoredPosition = new Vector2(0f, 0f);
+            contentRect.sizeDelta = new Vector2(-20f, 300f);
+
+            VerticalLayoutGroup layout = _settingsContent.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(20, 20, 16, 16);
+            layout.spacing = 20f;
+            layout.childControlWidth = true;
+            layout.childForceExpandWidth = true;
+            layout.childControlHeight = false;
+            layout.childForceExpandHeight = false;
+
+            ContentSizeFitter fitter = _settingsContent.AddComponent<ContentSizeFitter>();
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // Build setting sections
+            BuildAudioSection(_settingsContent);
+            BuildGraphicsSection(_settingsContent);
+            BuildGameplaySection(_settingsContent);
+            BuildOtherSection(_settingsContent);
+
+            _settings.SetActive(false);
+        }
+
+        GameObject _settingsContent;
+
+        void BuildAudioSection(Transform parent)
+        {
+            // Section header
+            GameObject section = CreateSettingSection(parent, "АУДИО");
+
+            // Music volume
+            CreateSliderSetting(section.transform, "Громкость музыки", "MusicVolume", 0.5f,
+                value => {
+                    if (_musicVolumeText != null) _musicVolumeText.text = Mathf.RoundToInt(value * 100f) + "%";
+                    if (_game.Sim != null && _game.Sim.MusicSource != null)
+                        _game.Sim.MusicSource.volume = value;
+                    PlayerPrefs.SetFloat("MusicVolume", value);
+                    PlayerPrefs.Save();
+                },
+                out _musicSlider, out _musicVolumeText);
+
+            // SFX volume (placeholder for future)
+            CreateSliderSetting(section.transform, "Громкость эффектов", "SfxVolume", 0.7f,
+                value => {
+                    PlayerPrefs.SetFloat("SfxVolume", value);
+                    PlayerPrefs.Save();
+                },
+                out _, out _);
+        }
+
+        void BuildGraphicsSection(Transform parent)
+        {
+            GameObject section = CreateSettingSection(parent, "ГРАФИКА");
+
+            CreateToggleSetting(section.transform, "Частицы", "ParticlesEnabled", true,
+                value => {
+                    PlayerPrefs.SetInt("ParticlesEnabled", value ? 1 : 0);
+                    PlayerPrefs.Save();
+                });
+
+            CreateDropdownSetting(section.transform, "Качество", "GraphicsQuality",
+                new[] { "Низкое", "Среднее", "Высокое" }, 2,
+                value => {
+                    PlayerPrefs.SetInt("GraphicsQuality", value);
+                    PlayerPrefs.Save();
+                });
+
+            CreateToggleSetting(section.transform, "VSync", "VSync", true,
+                value => {
+                    QualitySettings.vSyncCount = value ? 1 : 0;
+                    PlayerPrefs.SetInt("VSync", value ? 1 : 0);
+                    PlayerPrefs.Save();
+                });
+        }
+
+        void BuildGameplaySection(Transform parent)
+        {
+            GameObject section = CreateSettingSection(parent, "ИГРА");
+
+            CreateToggleSetting(section.transform, "Автопауза при потере фокуса", "AutoPauseOnFocusLoss", true,
+                value => {
+                    PlayerPrefs.SetInt("AutoPauseOnFocusLoss", value ? 1 : 0);
+                    PlayerPrefs.Save();
+                });
+
+            CreateToggleSetting(section.transform, "Подтверждение выхода", "ConfirmExit", true,
+                value => {
+                    PlayerPrefs.SetInt("ConfirmExit", value ? 1 : 0);
+                    PlayerPrefs.Save();
+                });
+
+            CreateSliderSetting(section.transform, "Скорость игры", "GameSpeed", 1.0f,
+                value => {
+                    Time.timeScale = value;
+                    PlayerPrefs.SetFloat("GameSpeed", value);
+                    PlayerPrefs.Save();
+                },
+                out _, out _);
+        }
+
+        void BuildOtherSection(Transform parent)
+        {
+            GameObject section = CreateSettingSection(parent, "ДРУГОЕ");
+
+            // Reset to defaults
+            Button resetBtn = CreateButtonSetting(section.transform, "Сбросить настройки", "Сбросить",
+                () => {
+                    PlayerPrefs.DeleteAll();
+                    PlayerPrefs.Save();
+                    // Reset UI to defaults
+                    if (_musicSlider != null) _musicSlider.value = 0.5f;
+                    PlayerPrefs.SetFloat("MusicVolume", 0.5f);
+                    PlayerPrefs.SetFloat("SfxVolume", 0.7f);
+                    PlayerPrefs.SetInt("ParticlesEnabled", 1);
+                    PlayerPrefs.SetInt("GraphicsQuality", 2);
+                    PlayerPrefs.SetInt("VSync", 1);
+                    PlayerPrefs.SetInt("AutoPauseOnFocusLoss", 1);
+                    PlayerPrefs.SetInt("ConfirmExit", 1);
+                    PlayerPrefs.SetFloat("GameSpeed", 1.0f);
+                    PlayerPrefs.Save();
+                });
+
+            // Version info
+            Text versionText = NewText(section.transform, "VersionInfo", "Версия 1.0.0", 11, TextMuted, TextAnchor.MiddleCenter);
+            RectTransform vt = versionText.rectTransform;
+            vt.anchorMin = new Vector2(0f, 0f);
+            vt.anchorMax = new Vector2(1f, 0f);
+            vt.pivot = new Vector2(0.5f, 0f);
+            vt.anchoredPosition = new Vector2(0f, 8f);
+            vt.sizeDelta = new Vector2(0f, 20f);
+        }
+
+        GameObject CreateSettingSection(Transform parent, string title)
+        {
+            GameObject section = NewRect(parent, "Section_" + title).gameObject;
+            RectTransform sr = section.GetComponent<RectTransform>();
+            sr.anchorMin = new Vector2(0f, 1f);
+            sr.anchorMax = new Vector2(1f, 1f);
+            sr.pivot = new Vector2(0.5f, 1f);
+            sr.anchoredPosition = new Vector2(0f, 0f);
+            sr.sizeDelta = new Vector2(0f, 40f);
+
+            VerticalLayoutGroup vlg = section.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(0, 0, 0, 8);
+            vlg.spacing = 10f;
+            vlg.childControlWidth = true;
+            vlg.childForceExpandWidth = true;
+
+            // Section title
+            Text sectionTitle = NewText(section.transform, "SectionTitle_" + title, title, 13, AccentAmber, TextAnchor.MiddleLeft);
+            RectTransform str = sectionTitle.rectTransform;
+            str.anchorMin = new Vector2(0f, 1f);
+            str.anchorMax = new Vector2(1f, 1f);
+            str.pivot = new Vector2(0f, 1f);
+            str.anchoredPosition = new Vector2(0f, 0f);
+            str.sizeDelta = new Vector2(0f, 22f);
+            sectionTitle.fontStyle = FontStyle.Bold;
+
+            // Separator
+            GameObject sep = NewRect(section.transform, "Separator").gameObject;
+            RectTransform spr = sep.GetComponent<RectTransform>();
+            spr.anchorMin = new Vector2(0f, 1f);
+            spr.anchorMax = new Vector2(1f, 1f);
+            spr.pivot = new Vector2(0.5f, 1f);
+            spr.anchoredPosition = new Vector2(0f, -28f);
+            spr.sizeDelta = new Vector2(0f, 1f);
+            Image sepImg = sep.AddComponent<Image>();
+            sepImg.color = new Color(1f, 1f, 1f, 0.08f);
+            sepImg.raycastTarget = false;
+
+            return section;
+        }
+
+        void CreateSliderSetting(Transform parent, string label, string prefKey, float defaultValue,
+            UnityEngine.Events.UnityAction<float> onChange, out Slider slider, out Text valueText)
+        {
+            GameObject setting = NewRect(parent, "Slider_" + label).gameObject;
+            RectTransform r = setting.GetComponent<RectTransform>();
+            r.anchorMin = new Vector2(0f, 1f);
+            r.anchorMax = new Vector2(1f, 1f);
+            r.pivot = new Vector2(0.5f, 1f);
+            r.sizeDelta = new Vector2(0f, 48f);
+
+            VerticalLayoutGroup vlg = setting.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(0, 0, 0, 0);
+            vlg.spacing = 4f;
+
+            // Label + value
+            GameObject labelRow = NewRect(setting.transform, "LabelRow").gameObject;
+            RectTransform lr = labelRow.GetComponent<RectTransform>();
+            lr.anchorMin = new Vector2(0f, 1f);
+            lr.anchorMax = new Vector2(1f, 1f);
+            lr.pivot = new Vector2(0.5f, 1f);
+            lr.sizeDelta = new Vector2(0f, 20f);
+
+            HorizontalLayoutGroup hl = labelRow.AddComponent<HorizontalLayoutGroup>();
+            hl.childForceExpandWidth = true;
+
+            Text labelText = NewText(labelRow.transform, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
+            valueText = NewText(labelRow.transform, "ValueText", Mathf.RoundToInt(defaultValue * 100f) + "%", 13, AccentCyan, TextAnchor.MiddleRight);
+
+            // Slider
+            slider = NewRect(setting.transform, "Slider").gameObject.AddComponent<Slider>();
+            RectTransform sr = slider.GetComponent<RectTransform>();
+            sr.anchorMin = new Vector2(0f, 1f);
+            sr.anchorMax = new Vector2(1f, 1f);
+            sr.pivot = new Vector2(0.5f, 1f);
+            sr.sizeDelta = new Vector2(0f, 24f);
+
+            // Background
+            GameObject bg = NewRect(sr, "Background").gameObject;
             Image bgImg = bg.AddComponent<Image>();
             bgImg.sprite = _sprBtnNeutral;
             bgImg.type = Image.Type.Sliced;
             bgImg.color = new Color(0.1f, 0.1f, 0.15f, 1f);
-            _musicSlider.targetGraphic = bgImg;
+            slider.targetGraphic = bgImg;
 
-            // Fill area
-            GameObject fillArea = NewRect(sliderRect, "Fill Area").gameObject;
-            RectTransform fillAreaRect = fillArea.GetComponent<RectTransform>();
-            fillAreaRect.anchorMin = new Vector2(0f, 0.5f);
-            fillAreaRect.anchorMax = new Vector2(0.5f, 0.5f);
-            fillAreaRect.pivot = new Vector2(0f, 0.5f);
-            fillAreaRect.sizeDelta = new Vector2(-10f, 16f);
-            fillAreaRect.anchoredPosition = new Vector2(10f, 0f);
+            // Fill
+            GameObject fillArea = NewRect(sr, "Fill Area").gameObject;
+            RectTransform far = fillArea.GetComponent<RectTransform>();
+            far.anchorMin = new Vector2(0f, 0.5f);
+            far.anchorMax = new Vector2(0.5f, 0.5f);
+            far.pivot = new Vector2(0f, 0.5f);
+            far.sizeDelta = new Vector2(-10f, 16f);
+            far.anchoredPosition = new Vector2(10f, 0f);
             Image fillImg = fillArea.AddComponent<Image>();
             fillImg.sprite = _sprAccentBar;
             fillImg.type = Image.Type.Sliced;
             fillImg.color = AccentCyan;
-            _musicSlider.fillRect = fillAreaRect;
-            _musicSlider.fillRect = fillAreaRect;
+            slider.fillRect = far;
 
             // Handle
-            GameObject handle = NewRect(sliderRect, "Handle Slide Area/Handle").gameObject;
-            RectTransform handleRect = handle.GetComponent<RectTransform>();
-            handleRect.sizeDelta = new Vector2(20f, 24f);
+            GameObject handle = NewRect(sr, "Handle Slide Area/Handle").gameObject;
+            RectTransform hr = handle.GetComponent<RectTransform>();
+            hr.sizeDelta = new Vector2(20f, 24f);
             Image handleImg = handle.AddComponent<Image>();
             handleImg.sprite = _sprBtnAmber;
             handleImg.type = Image.Type.Sliced;
-            _musicSlider.handleRect = handleRect;
+            slider.handleRect = hr;
 
-            _musicSlider.minValue = 0f;
-            _musicSlider.maxValue = 1f;
-            _musicSlider.value = PlayerPrefs.GetFloat("MusicVolume", 0.5f);
-            _musicSlider.onValueChanged.AddListener(delegate { OnMusicVolumeChanged(_musicSlider.value); });
+            slider.minValue = 0f;
+            slider.maxValue = 1f;
+            slider.value = PlayerPrefs.GetFloat(prefKey, defaultValue);
+            slider.onValueChanged.AddListener(onChange);
+        }
 
-            // Значение громкости
-            _musicVolumeText = NewText(rect, "MusicVolumeText", "50%", 14, AccentCyan, TextAnchor.MiddleCenter);
-            SetRect(_musicVolumeText.rectTransform, new Vector2(0f, -40f), new Vector2(100f, 24f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
+        void CreateToggleSetting(Transform parent, string label, string prefKey, bool defaultValue, UnityEngine.Events.UnityAction<bool> onChange)
+        {
+            GameObject setting = NewRect(parent, "Toggle_" + label).gameObject;
+            RectTransform r = setting.GetComponent<RectTransform>();
+            r.anchorMin = new Vector2(0f, 1f);
+            r.anchorMax = new Vector2(1f, 1f);
+            r.pivot = new Vector2(0.5f, 1f);
+            r.sizeDelta = new Vector2(0f, 36f);
 
-            // Кнопка закрытия
-            Button closeBtn = NewButton(rect, "CloseSettings", "ЗАКРЫТЬ", Color.white, 14, _sprBtnNeutral);
-            SetRect(closeBtn.GetComponent<RectTransform>(), new Vector2(0f, -100f), new Vector2(140f, 40f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f));
-            closeBtn.onClick.AddListener(CloseSettings);
+            HorizontalLayoutGroup hl = setting.AddComponent<HorizontalLayoutGroup>();
+            hl.childForceExpandWidth = true;
 
-            _settings.SetActive(false);
+            Text labelText = NewText(setting.transform, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
+            RectTransform ltr = labelText.rectTransform;
+            ltr.sizeDelta = new Vector2(0f, 36f);
+
+            Toggle toggle = NewRect(setting.transform, "Toggle").gameObject.AddComponent<Toggle>();
+            RectTransform tr = toggle.GetComponent<RectTransform>();
+            tr.anchorMin = new Vector2(1f, 0.5f);
+            tr.anchorMax = new Vector2(1f, 0.5f);
+            tr.pivot = new Vector2(1f, 0.5f);
+            tr.sizeDelta = new Vector2(52f, 28f);
+
+            Image bg = tr.gameObject.AddComponent<Image>();
+            bg.sprite = _sprBtnNeutral;
+            bg.type = Image.Type.Sliced;
+            bg.color = new Color(0.15f, 0.15f, 0.2f, 1f);
+            toggle.targetGraphic = bg;
+
+            GameObject check = NewRect(tr, "Checkmark").gameObject;
+            Image checkImg = check.AddComponent<Image>();
+            checkImg.sprite = _sprBtnAmber;
+            checkImg.type = Image.Type.Sliced;
+            checkImg.color = AccentCyan;
+            toggle.graphic = checkImg;
+
+            toggle.isOn = PlayerPrefs.GetInt(prefKey, defaultValue ? 1 : 0) == 1;
+            toggle.onValueChanged.AddListener(onChange);
+        }
+
+        void CreateDropdownSetting(Transform parent, string label, string prefKey, string[] options, int defaultIndex, UnityEngine.Events.UnityAction<int> onChange)
+        {
+            GameObject setting = NewRect(parent, "Dropdown_" + label).gameObject;
+            RectTransform r = setting.GetComponent<RectTransform>();
+            r.anchorMin = new Vector2(0f, 1f);
+            r.anchorMax = new Vector2(1f, 1f);
+            r.pivot = new Vector2(0.5f, 1f);
+            r.sizeDelta = new Vector2(0f, 40f);
+
+            VerticalLayoutGroup vlg = setting.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(0, 0, 0, 0);
+            vlg.spacing = 4f;
+
+            Text labelText = NewText(setting.transform, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
+
+            Dropdown dropdown = NewRect(setting.transform, "Dropdown").gameObject.AddComponent<Dropdown>();
+            RectTransform dr = dropdown.GetComponent<RectTransform>();
+            dr.anchorMin = new Vector2(0f, 1f);
+            dr.anchorMax = new Vector2(1f, 1f);
+            dr.pivot = new Vector2(0.5f, 1f);
+            dr.sizeDelta = new Vector2(0f, 32f);
+
+            Image bg = dr.gameObject.AddComponent<Image>();
+            bg.sprite = _sprBtnNeutral;
+            bg.type = Image.Type.Sliced;
+            bg.color = new Color(0.12f, 0.12f, 0.17f, 1f);
+
+            Dropdown.OptionData[] data = new Dropdown.OptionData[options.Length];
+            for (int i = 0; i < options.Length; i++)
+                data[i] = new Dropdown.OptionData(options[i]);
+            dropdown.options = new List<Dropdown.OptionData>(data);
+
+            dropdown.value = PlayerPrefs.GetInt(prefKey, defaultIndex);
+            dropdown.onValueChanged.AddListener(onChange);
+        }
+
+        Button CreateButtonSetting(Transform parent, string label, string buttonText, UnityEngine.Events.UnityAction onClick)
+        {
+            GameObject setting = NewRect(parent, "Button_" + label).gameObject;
+            RectTransform r = setting.GetComponent<RectTransform>();
+            r.anchorMin = new Vector2(0f, 1f);
+            r.anchorMax = new Vector2(1f, 1f);
+            r.pivot = new Vector2(0.5f, 1f);
+            r.sizeDelta = new Vector2(0f, 40f);
+
+            HorizontalLayoutGroup hl = setting.AddComponent<HorizontalLayoutGroup>();
+            hl.childForceExpandWidth = true;
+
+            Text labelText = NewText(setting.transform, "Label", label, 13, TextWhite, TextAnchor.MiddleLeft);
+
+            Button btn = NewRect(setting.transform, "Button").gameObject.AddComponent<Button>();
+            RectTransform br = btn.GetComponent<RectTransform>();
+            br.anchorMin = new Vector2(1f, 0.5f);
+            br.anchorMax = new Vector2(1f, 0.5f);
+            br.pivot = new Vector2(1f, 0.5f);
+            br.sizeDelta = new Vector2(120f, 32f);
+
+            Image bg = br.gameObject.AddComponent<Image>();
+            bg.sprite = _sprBtnNeutral;
+            bg.type = Image.Type.Sliced;
+
+            Text btnText = NewText(br, "Text", buttonText, 13, Color.white, TextAnchor.MiddleCenter);
+            btn.onClick.AddListener(onClick);
+
+            return btn;
         }
 
         void OpenSettings()
