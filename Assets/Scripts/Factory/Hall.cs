@@ -412,33 +412,11 @@ namespace Game.Factory
             Spawn("__generator", station.Root, new Vector3(0f, 0f, 0.2f), 2.5f, 180);
             Spawn("warning-traffic", station.Root, new Vector3(-1.5f, 0f, -0.75f), 0.75f, 12f);
 
-            // Шестерёнки генератора: две зацепленные (большая 1.6м, малая 0.85м).
-            // Создаём общий pivot в точке зацепления (между центрами), вешаем на него обе шестерёнки.
-            // Радиусы: R_big=0.8, R_small=0.425 -> расстояние между центрами = 1.225.
-            // Ставим их на одной высоте Y=0.3, центры разделены по Z.
-            float bigR = 0.8f;
-            float smallR = 0.425f;
-            float centerDist = bigR + smallR; // 1.225
-            float meshY = 0.3f; // одинаковая высота для зацепления
-
-            // Точка зацепления (между центрами) — будет центром вращения (orbit pivot)
-            Vector3 meshPoint = new Vector3(-0.125f, meshY, -1.05f - bigR);
-
-            var orbitPivot = new GameObject("GeneratorOrbit");
-            orbitPivot.transform.SetParent(station.Root, false);
-            orbitPivot.transform.localPosition = meshPoint;
-            orbitPivot.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // оси горизонтально
-
-            // Большая шестерёнка: центр смещён от точки зацепления на +R_big по Z
-            Transform big = CreateCog(orbitPivot.transform, "cog-a",
-                new Vector3(0f, 0f, bigR), 1.6f, 0f);
-
-            // Малая шестерёнка: центр смещён на -R_small по Z (противоположная сторона)
-            Transform small = CreateCog(orbitPivot.transform, "cog-b",
-                new Vector3(0f, 0f, -smallR), 0.85f, 0f);
-
-            if (big != null) station.Spinners.Add(orbitPivot.transform); // вращаем общий pivot
-            // small не добавляем отдельно — он вращается вместе с big через orbitPivot
+            // Две шестерёнки, каждая со своим pivot (как было раньше).
+            Transform big = CreateCog(station.Root, "cog-a", new Vector3(-0.125f, 0.625f, -1.05f), 1.6f, 0f);
+            if (big != null) station.Spinners.Add(big);
+            Transform small = CreateCog(station.Root, "cog-b", new Vector3(-0.125f, 0f, -1.25f), 0.85f, 0);
+            if (small != null) station.Spinners.Add(small);
 
             station.Title = MakeLabel(station.Root, "ГЕНЕРАТОР " + (index + 1), new Vector3(0f, 3.78f, 0f), GeneratorColor, 0.052f);
             station.Info = MakeLabel(station.Root, "4 энергии", new Vector3(0f, 3.44f, 0f), MutedText, 0.033f);
