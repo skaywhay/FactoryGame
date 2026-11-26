@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using SysRandom = System.Random;
 
 namespace Game.Factory
 {
@@ -181,7 +182,7 @@ namespace Game.Factory
         public int DefectsMissed;
 
         // Свой рандом, чтобы не тащить UnityEngine в чистую симуляцию.
-        readonly Random _rng = new Random();
+        readonly SysRandom _rng = new SysRandom();
 
         // Три провала плана — и всё, завод закрывается. Меньше двух было слишком строго,
         // больше четырёх — никто уже не боится.
