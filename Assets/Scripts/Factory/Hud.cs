@@ -971,13 +971,15 @@ namespace Game.Factory
 
             // Шапка: заголовок слева, кнопка закрытия справа — как у ТАБЛИЦЫ.
             Text title = NewText(rect, "SettingsTitle", "НАСТРОЙКИ", 20, AccentCyan, TextAnchor.MiddleLeft);
+            // Якорь обязан быть у ВЕРХА модалки: с якорем по центру шапка
+            // уезжает в середину окна, под карточки настроек.
             SetRect(title.rectTransform, new Vector2(pad, -SettingsHeaderHeight * 0.5f), new Vector2(300f, 30f),
-                new Vector2(0f, 0.5f), new Vector2(0f, 0.5f));
+                new Vector2(0f, 1f), new Vector2(0f, 1f));
             title.fontStyle = FontStyle.Bold;
 
             Button closeBtn = NewButton(rect, "CloseSettings", "ЗАКРЫТЬ", Color.white, 12, _sprBtnNeutral);
             SetRect(closeBtn.GetComponent<RectTransform>(), new Vector2(-pad, -SettingsHeaderHeight * 0.5f), new Vector2(96f, 32f),
-                new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
+                new Vector2(1f, 1f), new Vector2(1f, 1f));
             closeBtn.onClick.AddListener(CloseSettings);
 
             // Разделитель под шапкой — тот же приём, что у остальных модалок.
