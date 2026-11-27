@@ -1070,9 +1070,10 @@ namespace Game.Factory
             sbRect.anchorMax = new Vector2(1f, 1f);
             sbRect.pivot = new Vector2(1f, 0.5f);
             // Полоса живёт в желобе под шапкой: без offsetMin/offsetMax её верх
-            // заезжал в шапку и на кнопку «ЗАКРЫТЬ».
+            // заезжал в шапку и на кнопку «ЗАКРЫТЬ». Отступ сверху с запасом,
+            // чтобы между кнопкой и полосой была видимая впадиная, а не 3 px.
             sbRect.offsetMin = new Vector2(-34f, 24f);
-            sbRect.offsetMax = new Vector2(-28f, -SettingsHeaderHeight - 8f);
+            sbRect.offsetMax = new Vector2(-28f, -SettingsHeaderHeight - 26f);
             scrollbar.direction = Scrollbar.Direction.BottomToTop;
 
             // Трек
