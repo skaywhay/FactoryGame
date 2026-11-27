@@ -1047,8 +1047,8 @@ namespace Game.Factory
             // IMPORTANT: ScrollRect needs content assigned
             scrollRect.content = contentRect;
 
-            BuildSettingsScrollbar(rect);
             _settingsScrollRect = scrollRect;
+            BuildSettingsScrollbar(rect, scrollRect);
 
             // Build setting sections
             BuildAudioSection(_settingsContent.transform);
@@ -1061,7 +1061,7 @@ namespace Game.Factory
 
         // Тонкая полоса прокрутки в цветах игры: узкий трек + cyan-бегунок.
         // Стандартный юнитовский скроллбар в этом окне выглядел чужеродно.
-        void BuildSettingsScrollbar(RectTransform parent)
+        void BuildSettingsScrollbar(RectTransform parent, ScrollRect scrollRect)
         {
             GameObject sbGo = NewRect(parent, "SettingsScrollbar").gameObject;
             Scrollbar scrollbar = sbGo.AddComponent<Scrollbar>();
@@ -1069,9 +1069,10 @@ namespace Game.Factory
             sbRect.anchorMin = new Vector2(1f, 0f);
             sbRect.anchorMax = new Vector2(1f, 1f);
             sbRect.pivot = new Vector2(1f, 0.5f);
-            // Полоса по вертикали выровнена по области прокрутки, а не по всей модалке.
-            sbRect.anchoredPosition = new Vector2(-28f, -24f);
-            sbRect.sizeDelta = new Vector2(6f, -SettingsHeaderHeight - 8f - 24f);
+            // Полоса живёт в желобе под шапкой: без offsetMin/offsetMax её верх
+            // заезжал в шапку и на кнопку «ЗАКРЫТЬ».
+            sbRect.offsetMin = new Vector2(-34f, 24f);
+            sbRect.offsetMax = new Vector2(-28f, -SettingsHeaderHeight - 8f);
             scrollbar.direction = Scrollbar.Direction.BottomToTop;
 
             // Трек
@@ -1107,6 +1108,12 @@ namespace Game.Factory
             scrollbar.targetGraphic = handleImg;
             scrollbar.handleRect = handleRect;
             _settingsScrollbar = scrollbar;
+
+            // Именно эта связь заставляет ручку полосы ездить при прокрутке
+            // и позволяет таскать контент самой полосой. Без неё полоса
+            // была чисто декоративной.
+            scrollRect.verticalScrollbar = scrollbar;
+            scrollRect.verticalScrollbarSpacing = 4f;
         }
 
         void BuildAudioSection(Transform parent)
