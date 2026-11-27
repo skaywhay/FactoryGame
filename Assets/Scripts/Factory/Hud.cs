@@ -1257,6 +1257,10 @@ namespace Game.Factory
             stripe.pivot = new Vector2(0f, 0.5f);
             stripe.anchoredPosition = new Vector2(7f, 0f);
             stripe.sizeDelta = new Vector2(4f, -24f);
+            // Без этого вертикальная верстка карточки разложила бы полоску
+            // горизонтальной строкой во всю ширину карточки.
+            LayoutElement stripeIgnore = stripe.gameObject.AddComponent<LayoutElement>();
+            stripeIgnore.ignoreLayout = true;
             Image stripeImg = stripe.gameObject.AddComponent<Image>();
             stripeImg.sprite = _sprAccentBar;
             stripeImg.type = Image.Type.Sliced;
